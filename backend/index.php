@@ -1,0 +1,35 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/helpers/ResponseHelper.php';
+require_once __DIR__ . '/helpers/JWTHelper.php';
+require_once __DIR__ . '/helpers/PaginationHelper.php';
+require_once __DIR__ . '/helpers/UploadHelper.php';
+require_once __DIR__ . '/helpers/MailHelper.php';
+require_once __DIR__ . '/middleware/RateLimiter.php';
+require_once __DIR__ . '/middleware/AuthMiddleware.php';
+require_once __DIR__ . '/middleware/RoleMiddleware.php';
+require_once __DIR__ . '/models/BaseModel.php';
+require_once __DIR__ . '/models/UserModel.php';
+require_once __DIR__ . '/models/CategoryModel.php';
+require_once __DIR__ . '/models/ProductModel.php';
+require_once __DIR__ . '/models/CartModel.php';
+require_once __DIR__ . '/models/OrderModel.php';
+require_once __DIR__ . '/models/ReviewModel.php';
+require_once __DIR__ . '/models/WishlistModel.php';
+require_once __DIR__ . '/models/CouponModel.php';
+require_once __DIR__ . '/models/NotificationModel.php';
+require_once __DIR__ . '/models/VendorModel.php';
+require_once __DIR__ . '/controllers/AuthController.php';
+require_once __DIR__ . '/controllers/ProductController.php';
+require_once __DIR__ . '/controllers/CartController.php';
+require_once __DIR__ . '/controllers/OrderController.php';
+require_once __DIR__ . '/controllers/UserController.php';
+require_once __DIR__ . '/controllers/VendorController.php';
+require_once __DIR__ . '/controllers/ReviewController.php';
+require_once __DIR__ . '/controllers/CouponController.php';
+require_once __DIR__ . '/controllers/AdminController.php';
+require_once __DIR__ . '/routes/api.php';

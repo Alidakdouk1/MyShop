@@ -1,0 +1,57 @@
+import api from './axios'
+
+// Dashboard
+export const getAdminDashboard = ()           => api.get('/admin/dashboard')
+
+// Users
+export const getAdminUsers     = (params)     => api.get('/admin/users', { params })
+export const createAdminUser   = (data)       => api.post('/admin/users', data)
+export const updateAdminUser   = (id, data)   => api.put(`/admin/users/${id}`, data)
+export const deleteAdminUser   = (id)         => api.delete(`/admin/users/${id}`)
+export const updateUserRole    = (id, role)   => api.put(`/admin/users/${id}/role`, { role })
+
+// Admins
+export const getAdmins         = (params)     => api.get('/admin/admins', { params })
+export const createAdmin       = (data)       => api.post('/admin/admins', data)
+export const updateAdmin       = (id, data)   => api.put(`/admin/admins/${id}`, data)
+export const deleteAdmin       = (id)         => api.delete(`/admin/admins/${id}`)
+
+// Orders
+export const getAdminOrders    = (params)     => api.get('/admin/orders', { params })
+export const updateOrderStatus = (id, status) => api.put(`/admin/orders/${id}/status`, { status })
+
+// Products
+export const getAdminProducts       = (params)       => api.get('/admin/products', { params })
+export const getAdminProduct        = (id)           => api.get(`/admin/products/${id}`)
+export const adminCreateProduct     = (data)         => api.post('/admin/products', data)
+export const adminUpdateProduct     = (id, data)     => api.put(`/admin/products/${id}`, data)
+export const adminDeleteProduct     = (id)           => api.delete(`/admin/products/${id}`)
+export const adminUploadImage       = (id, formData) => api.post(`/admin/products/${id}/images`, formData)
+export const adminDeleteImage       = (id, imgId)    => api.delete(`/admin/products/${id}/images/${imgId}`)
+export const adminAddVariant        = (id, data)     => api.post(`/admin/products/${id}/variants`, data)
+export const adminDeleteVariant     = (id, vid)      => api.delete(`/admin/products/${id}/variants/${vid}`)
+
+// Categories
+export const getAdminCategories    = ()           => api.get('/admin/categories')
+export const createAdminCategory   = (data)       => api.post('/admin/categories', data)
+export const updateAdminCategory   = (id, data)   => api.put(`/admin/categories/${id}`, data)
+export const deleteAdminCategory   = (id)         => api.delete(`/admin/categories/${id}`)
+export const uploadCategoryImage   = (formData)   => api.post('/admin/homepage-images', formData)
+
+// Coupons
+export const getAdminCoupons   = ()           => api.get('/admin/coupons')
+export const createCoupon      = (data)       => api.post('/admin/coupons', data)
+
+// Homepage Settings (legacy – announcement bar)
+export const getHomepageSettings    = ()         => api.get('/homepage-settings')
+export const updateHomepageSettings = (data)     => api.put('/homepage-settings', data)
+export const uploadHomepageImage    = (formData) => api.post('/admin/homepage-images', formData)
+
+// Homepage Sections (CMS builder)
+export const getHomepageSections      = ()           => api.get('/homepage-sections')
+export const getAdminHomepageSections = ()           => api.get('/admin/homepage-sections')
+export const createHomepageSection    = (data)       => api.post('/admin/homepage-sections', data)
+export const updateHomepageSection    = (id, data)   => api.put(`/admin/homepage-sections/${id}`, data)
+export const deleteHomepageSection    = (id)         => api.delete(`/admin/homepage-sections/${id}`)
+export const duplicateHomepageSection = (id)         => api.post(`/admin/homepage-sections/${id}/duplicate`)
+export const reorderHomepageSections  = (sections)   => api.put('/admin/homepage-sections/reorder', { sections })
