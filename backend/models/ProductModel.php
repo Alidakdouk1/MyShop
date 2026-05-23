@@ -62,7 +62,8 @@ class ProductModel extends BaseModel
         $params = [];
 
         if (!empty($f['search'])) {
-            $sql .= " AND (p.name LIKE ? OR p.sku LIKE ?)";
+            $sql .= " AND (p.name LIKE ? OR p.sku LIKE ? OR CAST(COALESCE(p.sale_price, p.base_price) AS CHAR) LIKE ?)";
+            $params[] = "%{$f['search']}%";
             $params[] = "%{$f['search']}%";
             $params[] = "%{$f['search']}%";
         }
@@ -120,7 +121,8 @@ class ProductModel extends BaseModel
             $params[] = (float) $f['max_price'];
         }
         if (!empty($f['search'])) {
-            $sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
+            $sql .= " AND (p.name LIKE ? OR p.description LIKE ? OR CAST(COALESCE(p.sale_price, p.base_price) AS CHAR) LIKE ?)";
+            $params[] = "%{$f['search']}%";
             $params[] = "%{$f['search']}%";
             $params[] = "%{$f['search']}%";
         }
@@ -133,13 +135,47 @@ class ProductModel extends BaseModel
         if (!empty($f['in_stock'])) {
             $sql .= " AND p.stock_qty > 0";
         }
+        if (!empty($f['filters']) && is_array($f['filters'])) {
+            foreach ($f['filters'] as $filterId => $optionIds) {
+                $filterId = (int) $filterId;
+                $optionIds = array_values(array_filter(array_map('intval', (array) $optionIds)));
+                if (!$filterId || !$optionIds) continue;
+                $ph = implode(',', array_fill(0, count($optionIds), '?'));
+                $sql .= " AND EXISTS (
+                    SELECT 1 FROM product_filter_values pfv
+                    WHERE pfv.product_id = p.id
+                      AND pfv.filter_id = ?
+                      AND pfv.filter_option_id IN ({$ph})
+                )";
+                $params[] = $filterId;
+                foreach ($optionIds as $oid) $params[] = $oid;
+            }
+        }
+        if (!empty($f['range_filters']) && is_array($f['range_filters'])) {
+            foreach ($f['range_filters'] as $filterId => $bounds) {
+                $filterId = (int) $filterId;
+                $min = $bounds['min'] ?? null;
+                $max = $bounds['max'] ?? null;
+                if (!$filterId || ($min === null && $max === null)) continue;
+                $sub  = " AND EXISTS (
+                    SELECT 1 FROM product_filter_values pfv
+                    WHERE pfv.product_id = p.id
+                      AND pfv.filter_id = ?";
+                $params[] = $filterId;
+                if ($min !== null) { $sub .= " AND pfv.max_value >= ?"; $params[] = (float) $min; }
+                if ($max !== null) { $sub .= " AND pfv.min_value <= ?"; $params[] = (float) $max; }
+                $sub .= ")";
+                $sql .= $sub;
+            }
+        }
         if (!$count) {
             $sort = match ($f['sort'] ?? 'newest') {
-                'price_asc'  => 'COALESCE(p.sale_price, p.base_price) ASC',
-                'price_desc' => 'COALESCE(p.sale_price, p.base_price) DESC',
-                'popular'    => 'p.views_count DESC',
-                'rating'     => 'rating_avg DESC',
-                default      => 'p.created_at DESC',
+                'price_asc'   => 'COALESCE(p.sale_price, p.base_price) ASC',
+                'price_desc'  => 'COALESCE(p.sale_price, p.base_price) DESC',
+                'popular'     => 'p.views_count DESC',
+                'rating'      => 'rating_avg DESC',
+                'recommended' => 'p.is_featured DESC, rating_avg DESC, p.views_count DESC',
+                default       => 'p.created_at DESC',
             };
             $sql .= " ORDER BY {$sort}";
         }

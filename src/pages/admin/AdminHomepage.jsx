@@ -485,12 +485,13 @@ function CategoryCirclesEditor({ data, onChange }) {
               value={shape}
               onChange={v => onChange({ ...data, shape: v })}
               options={[
-                { value: 'circle',  label: 'Circle' },
-                { value: 'rounded', label: 'Rounded Square' },
-                { value: 'square',  label: 'Square (slight corners)' },
-                { value: 'sharp',   label: 'Sharp Square' },
-                { value: 'hexagon', label: 'Hexagon' },
-                { value: 'diamond', label: 'Diamond' },
+                { value: 'circle',       label: 'Circle' },
+                { value: 'rounded',      label: 'Rounded Square' },
+                { value: 'square',       label: 'Square (slight corners)' },
+                { value: 'sharp',        label: 'Sharp Square' },
+                { value: 'hexagon',      label: 'Hexagon' },
+                { value: 'diamond',      label: 'Diamond' },
+                { value: 'image_banner', label: 'Image Banner (wide, scroll)' },
               ]}
             />
           </Field>
@@ -553,14 +554,64 @@ function ProductGridEditor({ data, onChange }) {
       </Card>
 
       <Card title="Layout">
-        <Field label="Columns">
-          <Select value={String(data.cols || 4)} onChange={v => onChange({ ...data, cols: parseInt(v) })}
-            options={[
-              { value: '2', label: '2 columns' },
-              { value: '3', label: '3 columns' },
-              { value: '4', label: '4 columns' },
-            ]} />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Display Mode">
+            <Select value={data.layout_mode || 'grid'} onChange={v => onChange({ ...data, layout_mode: v })}
+              options={[
+                { value: 'grid',   label: 'Grid (wrap rows)' },
+                { value: 'scroll', label: 'Scroll Row' },
+              ]} />
+          </Field>
+          <Field label="Card Shape">
+            <Select value={data.card_shape || 'rounded'} onChange={v => onChange({ ...data, card_shape: v })}
+              options={[
+                { value: 'rounded', label: 'Rounded (default)' },
+                { value: 'soft',    label: 'Soft' },
+                { value: 'sharp',   label: 'Sharp' },
+              ]} />
+          </Field>
+        </div>
+
+        {(data.layout_mode || 'grid') === 'grid' ? (
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <Field label="Desktop Columns">
+              <Select value={String(data.cols || 4)} onChange={v => onChange({ ...data, cols: parseInt(v) })}
+                options={[
+                  { value: '2', label: '2 columns' },
+                  { value: '3', label: '3 columns' },
+                  { value: '4', label: '4 columns' },
+                  { value: '5', label: '5 columns' },
+                ]} />
+            </Field>
+            <Field label="Mobile Columns">
+              <Select value={String(data.mobile_cols || 2)} onChange={v => onChange({ ...data, mobile_cols: parseInt(v) })}
+                options={[
+                  { value: '1', label: '1 column' },
+                  { value: '2', label: '2 columns' },
+                ]} />
+            </Field>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <Field label="Visible Items">
+              <Select value={String(data.cols || 4)} onChange={v => onChange({ ...data, cols: parseInt(v) })}
+                options={[
+                  { value: '2', label: '2 visible' },
+                  { value: '3', label: '3 visible' },
+                  { value: '4', label: '4 visible' },
+                  { value: '5', label: '5 visible' },
+                ]} />
+            </Field>
+            <Field label="Card Size">
+              <Select value={data.scroll_size || 'md'} onChange={v => onChange({ ...data, scroll_size: v })}
+                options={[
+                  { value: 'sm', label: 'Small' },
+                  { value: 'md', label: 'Medium' },
+                  { value: 'lg', label: 'Large' },
+                ]} />
+            </Field>
+          </div>
+        )}
       </Card>
 
       <Card title="View All Link">
@@ -1083,7 +1134,7 @@ function AddSectionModal({ onAdd, onClose }) {
       ],
     },
     category_circles: { max_items: 12 },
-    product_grid:     { title: 'Products', subtitle: '', query: 'bestselling', limit: 8, cols: 4, view_all_link: '/shop', view_all_label: 'View all' },
+    product_grid:     { title: 'Products', subtitle: '', query: 'bestselling', limit: 8, cols: 4, mobile_cols: 2, layout_mode: 'grid', card_shape: 'rounded', scroll_size: 'md', view_all_link: '/shop', view_all_label: 'View all' },
     promo_banners:    { layout: '2col', banners: [{ title: 'SALE', subtitle: 'Up to 70% off', cta: 'Shop now →', link: '/shop', bg_color: '#C0392B', text_color: '#ffffff', image_url: '' }] },
     trust_badges:     { cols: 4, badges: [{ icon: '🚚', title: 'Free Shipping', desc: 'On orders over $50' }], bg_color: '', text_color: '' },
     text_section:     { title: 'New Section', content: 'Add your content here.', alignment: 'center', text_color: '', bg_color: '' },

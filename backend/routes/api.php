@@ -50,6 +50,9 @@ if (match_route('/api/categories', $path, $params)) {
 if (match_route('/api/categories/flat', $path, $params)) {
     (new ProductController())->categoriesFlat();
 }
+if (match_route('/api/categories/sections', $path, $params)) {
+    (new ProductController())->categorySections();
+}
 
 // ── Products (public + admin write) ──────────────────────────
 if (match_route('/api/products', $path, $params)) {
@@ -72,6 +75,30 @@ if (match_route('/api/products/{id}/images', $path, $params)) {
 }
 if (match_route('/api/products/{id}/reviews', $path, $params)) {
     if ($method === 'GET') (new ReviewController())->forProduct((int) $params['id']);
+}
+if (match_route('/api/products/{id}/filters', $path, $params)) {
+    if ($method === 'GET')                          (new FilterController())->showForProduct((int) $params['id']);
+    if ($method === 'POST' || $method === 'PUT')    (new FilterController())->saveForProduct((int) $params['id']);
+}
+
+// ── Filters (public + admin) ─────────────────────────────────
+if (match_route('/api/filters', $path, $params)) {
+    if ($method === 'GET')  (new FilterController())->index();
+    if ($method === 'POST') (new FilterController())->store();
+}
+if (match_route('/api/filters/{id}', $path, $params)) {
+    if ($method === 'PUT')    (new FilterController())->update((int) $params['id']);
+    if ($method === 'DELETE') (new FilterController())->destroy((int) $params['id']);
+}
+if (match_route('/api/admin/filters', $path, $params)) {
+    if ($method === 'GET') (new FilterController())->adminIndex();
+}
+if (match_route('/api/filter-options', $path, $params)) {
+    if ($method === 'POST') (new FilterController())->storeOption();
+}
+if (match_route('/api/filter-options/{id}', $path, $params)) {
+    if ($method === 'PUT')    (new FilterController())->updateOption((int) $params['id']);
+    if ($method === 'DELETE') (new FilterController())->destroyOption((int) $params['id']);
 }
 
 // ── Cart ─────────────────────────────────────────────────────
@@ -188,6 +215,22 @@ if (match_route('/api/admin/admins/{id}', $path, $params)) {
 if (match_route('/api/admin/categories', $path, $params)) {
     if ($method === 'GET')  (new AdminController())->categories();
     if ($method === 'POST') (new AdminController())->createCategory();
+}
+// category ↔ filter assignments — must be matched before the generic {id} route
+if (match_route('/api/admin/categories/{id}/filters', $path, $params)) {
+    if ($method === 'GET')                       (new FilterController())->categoryFilters((int) $params['id']);
+    if ($method === 'POST' || $method === 'PUT') (new FilterController())->saveCategoryFilters((int) $params['id']);
+}
+// category sections ("others" blocks) — also before the generic {id} route
+if (match_route('/api/admin/sections', $path, $params)) {
+    if ($method === 'GET') (new AdminController())->sections();
+}
+if (match_route('/api/admin/categories/{id}/sections', $path, $params)) {
+    if ($method === 'POST') (new AdminController())->createSection((int) $params['id']);
+}
+if (match_route('/api/admin/sections/{id}', $path, $params)) {
+    if ($method === 'PUT')    (new AdminController())->updateSection((int) $params['id']);
+    if ($method === 'DELETE') (new AdminController())->deleteSection((int) $params['id']);
 }
 if (match_route('/api/admin/categories/{id}', $path, $params)) {
     if ($method === 'PUT')    (new AdminController())->updateCategory((int) $params['id']);

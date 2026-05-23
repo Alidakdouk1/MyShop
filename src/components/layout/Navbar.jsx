@@ -83,7 +83,7 @@ const NAV_LINKS = [
   { label: 'Sale',        to: '/shop?on_sale=1' },
 ]
 
-export default function Navbar() {
+export default function Navbar({ headerRef, hidden = false }) {
   const dispatch    = useDispatch()
   const navigate    = useNavigate()
   const location    = useLocation()
@@ -120,7 +120,13 @@ export default function Navbar() {
 
   return (
     <>
-      <header className={`sticky top-0 z-50 bg-surface transition-shadow duration-300 ${scrolled ? 'shadow-md' : 'border-b border-border'}`}>
+      <header
+        ref={headerRef}
+        style={{ transform: hidden ? 'translateY(-100%)' : 'translateY(0)' }}
+        className={`sticky top-0 z-50 bg-surface transition-[transform,box-shadow] duration-300 will-change-transform ${
+          location.pathname === '/shop' ? '' : (scrolled ? 'shadow-md' : 'border-b border-border')
+        }`}
+      >
         <AnnouncementBar />
 
         <div className="max-w-screen-xl mx-auto px-4">

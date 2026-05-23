@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { getProduct, getProductReviews, createReview } from '../api/productApi'
+import { getProductFilters } from '../api/filterApi'
 import { addToCartThunk } from '../store/slices/cartSlice'
 import { toggleWishlistThunk, selectIsWishlisted, selectWishlistItemId } from '../store/slices/wishlistSlice'
 import { selectUser } from '../store/slices/authSlice'
@@ -9,6 +10,69 @@ import { useToast } from '../hooks/useToast'
 import StarRating from '../components/common/StarRating'
 import Spinner from '../components/ui/Spinner'
 import ProductCard from '../components/product/ProductCard'
+
+function FilterOptionPill({ label, active, soldOut, tooltip, onClick }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      {tooltip && hover && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#0F0F0F',
+            color: '#fff',
+            fontSize: '11px',
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            padding: '5px 9px',
+            borderRadius: '6px',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            zIndex: 5,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+          }}
+        >
+          {tooltip}
+          <span
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              borderLeft: '5px solid transparent',
+              borderRight: '5px solid transparent',
+              borderTop: '5px solid #0F0F0F',
+            }}
+          />
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={soldOut}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          padding: '8px 16px',
+          borderRadius: '10px',
+          fontSize: '13px', fontWeight: 600,
+          border: active ? '2px solid #0F0F0F' : '1.5px solid #E4E1D9',
+          background: active ? '#0F0F0F' : 'transparent',
+          color: active ? '#fff' : soldOut ? '#C8C4BC' : '#0F0F0F',
+          cursor: soldOut ? 'not-allowed' : 'pointer',
+          opacity: soldOut ? 0.55 : 1,
+          textDecoration: soldOut ? 'line-through' : 'none',
+          transition: 'all 0.15s',
+        }}
+      >
+        {label}
+      </button>
+    </div>
+  )
+}
 
 export default function ProductDetail() {
   const { slug }    = useParams()
@@ -28,6 +92,8 @@ export default function ProductDetail() {
   const [tab, setTab]             = useState('description')
   const [related, setRelated]     = useState([])
   const [imgLoaded, setImgLoaded] = useState(false)
+  const [productFilters, setProductFilters] = useState([])
+  const [pickedFilters, setPickedFilters]   = useState({}) // { [filter_id]: optionId }
   const tabsRef = useRef(null)
 
   const isWished = useSelector(selectIsWishlisted(product?.id))
@@ -37,17 +103,62 @@ export default function ProductDetail() {
     setLoading(true)
     setRelated([])
     setImgLoaded(false)
+    setProductFilters([])
+    setPickedFilters({})
     getProduct(slug).then(r => {
       const p = r.data.data
       setProduct(p)
       setActiveImg(0)
       setQty(1)
       setSelectedVariant((p.variants && p.variants.length > 0) ? p.variants[0] : null)
-      if (p?.id) getProductReviews(p.id).then(r2 => setReviews(r2.data.data || []))
+      if (p?.id) {
+        getProductReviews(p.id).then(r2 => setReviews(r2.data.data || []))
+        getProductFilters(p.id)
+          .then(r3 => setProductFilters(r3.data.data || []))
+          .catch(() => setProductFilters([]))
+      }
       setRelated(Array.isArray(p.related) ? p.related : [])
     }).catch(() => navigate('/not-found', { replace: true }))
       .finally(() => setLoading(false))
   }, [slug])
+
+  const variants    = product?.variants || []
+  const hasVariants = variants.length > 0
+
+  // Filters the customer must pick from (visible + has selectable options)
+  const visibleFilters = productFilters.filter(f =>
+    Number(f.is_visible) !== 0 &&
+    f.filter_type !== 'range' &&
+    (f.options || []).length > 0
+  )
+  const missingPicks = visibleFilters.filter(f => pickedFilters[f.filter_id] == null)
+  const allPicked    = missingPicks.length === 0
+
+  // Per-option stock cap = min of every picked option's quantity (ignore nulls)
+  const pickedOptionStocks = visibleFilters
+    .map(f => {
+      const pid = pickedFilters[f.filter_id]
+      if (pid == null) return null
+      const opt = f.options.find(o => o.id === pid)
+      return opt && opt.quantity != null ? Number(opt.quantity) : null
+    })
+    .filter(v => v != null)
+
+  const optionStockCap = pickedOptionStocks.length > 0
+    ? Math.min(...pickedOptionStocks)
+    : null
+
+  const stockQty = hasVariants
+    ? (selectedVariant ? Number(selectedVariant.stock_qty) : 0)
+    : optionStockCap != null
+      ? optionStockCap
+      : Number(product?.stock_qty || 0)
+
+  // Keep qty inside the available stock as picks change
+  useEffect(() => {
+    if (qty > stockQty) setQty(Math.max(1, stockQty))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockQty])
 
   if (loading) return (
     <div className="min-h-[70vh] flex items-center justify-center">
@@ -55,12 +166,6 @@ export default function ProductDetail() {
     </div>
   )
   if (!product) return null
-
-  const variants    = product.variants || []
-  const hasVariants = variants.length > 0
-  const stockQty    = hasVariants
-    ? (selectedVariant ? Number(selectedVariant.stock_qty) : 0)
-    : Number(product.stock_qty || 0)
 
   const priceModifier  = selectedVariant ? Number(selectedVariant.price_modifier || 0) : 0
   const basePrice      = Number(product.base_price || 0)
@@ -82,9 +187,26 @@ export default function ProductDetail() {
   const handleAddToCart = async () => {
     if (!user) { toast.info('Please login to add to cart'); navigate('/login'); return }
     if (hasVariants && !selectedVariant) { toast.info('Please select a size/option'); return }
+
+    // Block until the customer picks one value from every visible filter
+    if (!allPicked) {
+      const names = missingPicks.map(f => f.filter_name).join(', ')
+      toast.error(`Please pick a value for: ${names}`)
+      return
+    }
+    // Reject over-purchase against the picked options' stock
+    if (optionStockCap != null && qty > optionStockCap) {
+      toast.error(`Only ${optionStockCap} left for the selected option${optionStockCap === 1 ? '' : 's'}.`)
+      return
+    }
+
     setAdding(true)
     const payload = { product_id: product.id, quantity: qty }
     if (selectedVariant) payload.variant_id = selectedVariant.id
+    const selectedOptionIds = visibleFilters
+      .map(f => pickedFilters[f.filter_id])
+      .filter(Boolean)
+    if (selectedOptionIds.length) payload.selected_option_ids = selectedOptionIds
     const r = await dispatch(addToCartThunk(payload))
     setAdding(false)
     if (!r.error) toast.success('Added to cart!')
@@ -338,6 +460,74 @@ export default function ProductDetail() {
               </div>
             )}
 
+            {/* Dynamic filters (Size, Color, Material, …) — only those the admin marked visible */}
+            {productFilters.filter(f => Number(f.is_visible) !== 0).length > 0 && (
+              <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {productFilters.filter(f => Number(f.is_visible) !== 0).map(f => {
+                  if (f.filter_type === 'range') {
+                    if (f.min_value == null && f.max_value == null) return null
+                    return (
+                      <div key={f.filter_id}>
+                        <p style={{
+                          fontSize: '11px', fontWeight: 600,
+                          letterSpacing: '0.15em', textTransform: 'uppercase',
+                          color: '#5C5854', marginBottom: '8px',
+                        }}>
+                          {f.filter_name}
+                        </p>
+                        <p style={{ fontSize: '14px', color: '#0F0F0F', fontWeight: 600 }}>
+                          {f.min_value ?? '—'} – {f.max_value ?? '—'}{f.filter_unit ? ` ${f.filter_unit}` : ''}
+                        </p>
+                      </div>
+                    )
+                  }
+                  if (!f.options || f.options.length === 0) return null
+                  const picked = pickedFilters[f.filter_id]
+                  return (
+                    <div key={f.filter_id}>
+                      <p style={{
+                        fontSize: '11px', fontWeight: 600,
+                        letterSpacing: '0.15em', textTransform: 'uppercase',
+                        color: '#5C5854', marginBottom: '10px',
+                      }}>
+                        {f.filter_name}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {f.options.map(o => {
+                          const active     = picked === o.id
+                          const qty        = o.quantity
+                          const hasQty     = qty != null
+                          const soldOut    = hasQty && Number(qty) === 0
+                          const customHint = o.hover_text && String(o.hover_text).trim()
+                          const tipText    = customHint
+                            ? customHint
+                            : !hasQty ? null
+                              : soldOut ? 'Out of stock'
+                              : `${qty} in stock`
+                          return (
+                            <FilterOptionPill
+                              key={o.id}
+                              label={`${o.value}${f.filter_unit ? ` ${f.filter_unit}` : ''}`}
+                              active={active}
+                              soldOut={soldOut}
+                              tooltip={tipText}
+                              onClick={() => {
+                                if (soldOut) return
+                                setPickedFilters(s => ({
+                                  ...s,
+                                  [f.filter_id]: active ? null : o.id,
+                                }))
+                              }}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Quantity */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
               <span style={{
@@ -394,6 +584,24 @@ export default function ProductDetail() {
                 <span style={{ fontSize: '12px', color: '#9C9894' }}>{stockQty} in stock</span>
               )}
             </div>
+
+            {/* Inline hint when filter picks are missing */}
+            {!allPicked && (
+              <div
+                style={{
+                  background: '#FFFBEB',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  fontSize: '12px',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  marginBottom: '12px',
+                  fontWeight: 600,
+                }}
+              >
+                Please select: {missingPicks.map(f => f.filter_name).join(', ')}
+              </div>
+            )}
 
             {/* CTA buttons */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '28px' }}>

@@ -24,10 +24,66 @@ class ProductController
             'sort'        => $_GET['sort']          ?? 'newest',
             'on_sale'     => $_GET['on_sale']      ?? null,
             'in_stock'    => $_GET['in_stock']     ?? null,
+            'filters'        => $this->parseFilterParam($_GET['filters'] ?? null),
+            'range_filters'  => $this->parseRangeFilterParams($_GET),
         ];
         $items = $this->products->search($filters, $perPage, $offset);
         $total = $this->products->countSearch($filters);
         paginated($items, $total, $page, $perPage);
+    }
+
+    /**
+     * Parse a `filters` query param into [filter_id => [option_id, ...]].
+     * Accepts either:
+     *   filters=1:2,3;4:7         (URL-friendly)
+     *   filters[1][]=2&filters[1][]=3&filters[4][]=7   (array notation)
+     *   filters={"1":[2,3],"4":[7]}  (JSON)
+     */
+    private function parseFilterParam(mixed $raw): array
+    {
+        if ($raw === null || $raw === '') return [];
+        if (is_array($raw)) {
+            $out = [];
+            foreach ($raw as $fid => $opts) {
+                $fid = (int) $fid;
+                if (!$fid) continue;
+                $out[$fid] = array_values(array_filter(array_map('intval', (array) $opts)));
+            }
+            return $out;
+        }
+        $str = (string) $raw;
+        if ($str !== '' && ($str[0] === '{' || $str[0] === '[')) {
+            $decoded = json_decode($str, true);
+            if (is_array($decoded)) return $this->parseFilterParam($decoded);
+        }
+        // Compact form: 1:2,3;4:7
+        $out = [];
+        foreach (explode(';', $str) as $chunk) {
+            if (!str_contains($chunk, ':')) continue;
+            [$fid, $opts] = explode(':', $chunk, 2);
+            $fid = (int) $fid;
+            if (!$fid) continue;
+            $out[$fid] = array_values(array_filter(array_map('intval', explode(',', $opts))));
+        }
+        return $out;
+    }
+
+    /**
+     * Pull per-filter range bounds from query params shaped like
+     * f_<filterId>_min / f_<filterId>_max into [filter_id => [min, max]].
+     */
+    private function parseRangeFilterParams(array $query): array
+    {
+        $out = [];
+        foreach ($query as $key => $val) {
+            if (!preg_match('/^f_(\d+)_(min|max)$/', (string) $key, $m)) continue;
+            if ($val === '' || $val === null) continue;
+            $fid = (int) $m[1];
+            if (!$fid) continue;
+            $out[$fid] ??= ['min' => null, 'max' => null];
+            $out[$fid][$m[2]] = (float) $val;
+        }
+        return $out;
     }
 
     public function show(string $slug): never
@@ -164,5 +220,11 @@ class ProductController
         method('GET');
         $cats = new CategoryModel();
         success($cats->flat());
+    }
+
+    public function categorySections(): never
+    {
+        method('GET');
+        success((new CategorySectionModel())->all());
     }
 }

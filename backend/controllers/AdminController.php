@@ -32,7 +32,8 @@ class AdminController
 
         $model = new CategoryModel();
         $id    = $model->create([
-            'parent_id'  => isset($data['parent_id']) && $data['parent_id'] !== '' ? (int) $data['parent_id'] : null,
+            'parent_id'  => isset($data['parent_id'])  && $data['parent_id']  !== '' ? (int) $data['parent_id']  : null,
+            'section_id' => isset($data['section_id']) && $data['section_id'] !== '' ? (int) $data['section_id'] : null,
             'name'       => $name,
             'slug'       => $slug,
             'image_url'  => sanitize($data['image_url'] ?? ''),
@@ -60,6 +61,10 @@ class AdminController
             $update['parent_id'] = ($data['parent_id'] !== '' && $data['parent_id'] !== null)
                 ? (int) $data['parent_id'] : null;
         }
+        if (array_key_exists('section_id', $data)) {
+            $update['section_id'] = ($data['section_id'] !== '' && $data['section_id'] !== null)
+                ? (int) $data['section_id'] : null;
+        }
         if (array_key_exists('image_url',  $data)) $update['image_url']  = sanitize($data['image_url']);
         if (array_key_exists('sort_order', $data)) $update['sort_order'] = (int) $data['sort_order'];
         if (array_key_exists('has_sizes',  $data)) $update['has_sizes']  = (int) $data['has_sizes'];
@@ -83,6 +88,65 @@ class AdminController
 
         (new CategoryModel())->delete($id);
         success(null, 'Category deleted.');
+    }
+
+    // ── Category Sections ("others" blocks in the mega-menu) ────────────────────
+
+    /** GET /api/admin/sections — every section across all categories. */
+    public function sections(): never
+    {
+        method('GET');
+        $this->guard();
+        success((new CategorySectionModel())->all());
+    }
+
+    /** POST /api/admin/categories/{id}/sections — add a section to a category. */
+    public function createSection(int $categoryId): never
+    {
+        method('POST');
+        $this->guard();
+        if (!(new CategoryModel())->findById($categoryId)) error('Category not found.', 404);
+
+        $data  = getBody();
+        $title = sanitize($data['title'] ?? '');
+        if (!$title) error('Section title is required.', 422);
+
+        $model = new CategorySectionModel();
+        $id    = $model->create($categoryId, $title, (int) ($data['sort_order'] ?? 0));
+        success($model->findById($id), 'Section created.', 201);
+    }
+
+    /** PUT /api/admin/sections/{id} — rename / reorder a section. */
+    public function updateSection(int $id): never
+    {
+        method('PUT');
+        $this->guard();
+        $model = new CategorySectionModel();
+        if (!$model->findById($id)) error('Section not found.', 404);
+
+        $data   = getBody();
+        $update = [];
+        if (array_key_exists('title', $data)) {
+            $title = sanitize($data['title']);
+            if (!$title) error('Section title is required.', 422);
+            $update['title'] = $title;
+        }
+        if (array_key_exists('sort_order', $data)) $update['sort_order'] = (int) $data['sort_order'];
+        if (empty($update)) error('Nothing to update.', 422);
+
+        $model->update($id, $update);
+        success($model->findById($id), 'Section updated.');
+    }
+
+    /** DELETE /api/admin/sections/{id} — sub-categories fall back to the main block. */
+    public function deleteSection(int $id): never
+    {
+        method('DELETE');
+        $this->guard();
+        $model = new CategorySectionModel();
+        if (!$model->findById($id)) error('Section not found.', 404);
+        $model->delete($id);
+        success(null, 'Section deleted.');
     }
 
     // ── Dashboard ──────────────────────────────────────────────────────────────

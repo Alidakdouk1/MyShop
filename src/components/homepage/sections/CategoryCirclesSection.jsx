@@ -16,12 +16,58 @@ export default function CategoryCirclesSection({ data = {}, categories = [] }) {
   const rows       = Math.max(1, data.rows || 1)
   const sizePx     = SIZE_MAP[data.size || 'md'] || 76
   const shapeKey   = data.shape || 'circle'
-  const shapeStyle = SHAPE_STYLES[shapeKey] || SHAPE_STYLES.circle
-  const isClipPath = Boolean(shapeStyle.clipPath)
 
   const cats = categories.slice(0, maxItems)
   if (!cats.length) return null
 
+  // ─── Image Banner variant: wide rectangles, always horizontal scroll ─────
+  if (shapeKey === 'image_banner') {
+    const bannerH = Math.round(sizePx * 1.6)
+    const bannerW = Math.round(sizePx * 2.4)
+    return (
+      <div className="max-w-screen-xl mx-auto px-4 py-8">
+        <div
+          className="cat-banner-row flex items-start gap-4 overflow-x-auto pb-2"
+          style={{ scrollbarWidth: 'none' }}
+        >
+          <style>{`.cat-banner-row::-webkit-scrollbar { display: none; }`}</style>
+          {cats.map((cat) => (
+            <Link
+              key={cat.id}
+              to={`/shop?category_id=${cat.id}`}
+              className="shrink-0 flex flex-col items-center gap-2 group"
+              style={{ width: bannerW }}
+            >
+              <div
+                className="bg-surface-alt overflow-hidden flex items-center justify-center shadow-sm border-2 border-transparent group-hover:border-ink/20 transition-all"
+                style={{ width: bannerW, height: bannerH, borderRadius: '12px' }}
+              >
+                {cat.image_url ? (
+                  <img
+                    src={cat.image_url.startsWith('http') ? cat.image_url : `/MyShop/backend/${cat.image_url}`}
+                    alt={cat.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <span style={{ fontSize: bannerH * 0.42 }}>🛍️</span>
+                )}
+              </div>
+              <span
+                className="text-sm font-semibold text-ink-secondary group-hover:text-ink transition-colors text-center leading-tight"
+                style={{ width: bannerW }}
+              >
+                {cat.name}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Original circle/rounded/etc. variants ───────────────────────────────
+  const shapeStyle = SHAPE_STYLES[shapeKey] || SHAPE_STYLES.circle
+  const isClipPath = Boolean(shapeStyle.clipPath)
   const itemWidth  = sizePx + 16
   const labelCls   = sizePx < 70 ? 'text-[10px]' : 'text-[11px]'
   const isScroll   = rows === 1

@@ -33,9 +33,12 @@ class CartController
         $cart = $this->getCart();
         $data = getBody();
 
-        $productId = (int) ($data['product_id'] ?? 0);
-        $variantId = isset($data['variant_id']) ? (int) $data['variant_id'] : null;
-        $qty       = max(1, (int) ($data['quantity'] ?? 1));
+        $productId        = (int) ($data['product_id'] ?? 0);
+        $variantId        = isset($data['variant_id']) ? (int) $data['variant_id'] : null;
+        $qty              = max(1, (int) ($data['quantity'] ?? 1));
+        $selectedOptionIds = isset($data['selected_option_ids']) && is_array($data['selected_option_ids'])
+            ? array_values(array_filter(array_map('intval', $data['selected_option_ids'])))
+            : [];
 
         if (!$productId) error('product_id is required.', 422);
 
@@ -45,20 +48,36 @@ class CartController
 
         $price = (float) ($product['sale_price'] ?: $product['base_price']);
 
-        $inCart   = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
-        $totalQty = $inCart + $qty;
-
         if ($variantId) {
             $allVariants = $products->variants($productId);
             $variant     = current(array_filter($allVariants, fn($v) => $v['id'] == $variantId)) ?: null;
             if (!$variant) error('Variant not found.', 404);
+            $inCart   = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
+            $totalQty = $inCart + $qty;
             if ((int) $variant['stock_qty'] < $totalQty) error('Not enough stock.', 422);
             $price += (float) $variant['price_modifier'];
+        } elseif (!empty($selectedOptionIds)) {
+            // Each picked filter option has its OWN independent stock pool.
+            // For each option: (qty already in cart tied to that option) + new qty
+            // must not exceed the option's stock. Different option picks for the
+            // same product are separate cart rows, so their stocks don't blend.
+            $stocks = (new FilterModel())->optionQuantities($productId, $selectedOptionIds);
+            foreach ($selectedOptionIds as $oid) {
+                if (!isset($stocks[$oid])) continue; // option without stock tracking
+                $stock     = $stocks[$oid];
+                $inCartOpt = $this->carts->qtyInCartForOption((int) $cart['id'], $productId, $oid);
+                if ($stock < ($inCartOpt + $qty)) {
+                    $remaining = max(0, $stock - $inCartOpt);
+                    error("Only {$remaining} left for the selected option.", 422);
+                }
+            }
         } else {
+            $inCart   = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
+            $totalQty = $inCart + $qty;
             if ((int) $product['stock_qty'] < $totalQty) error('Not enough stock.', 422);
         }
 
-        $this->carts->addItem((int) $cart['id'], $productId, $variantId, $qty, $price);
+        $this->carts->addItem((int) $cart['id'], $productId, $variantId, $qty, $price, $selectedOptionIds);
         $items = $this->carts->items((int) $cart['id']);
         $total = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
         success(['cart_id' => $cart['id'], 'items' => $items, 'total' => round($total, 2)], 'Item added to cart.', 201);
@@ -83,7 +102,26 @@ class CartController
             $variant     = current(array_filter($allVariants, fn($v) => $v['id'] == $item['variant_id'])) ?: null;
             if ($variant && (int) $variant['stock_qty'] < $qty) error('Not enough stock.', 422);
         } else {
-            if ((int) $product['stock_qty'] < $qty) error('Not enough stock.', 422);
+            $itemOptionIds = $this->carts->itemOptionIds($itemId);
+            if (!empty($itemOptionIds)) {
+                $stocks = (new FilterModel())->optionQuantities((int) $item['product_id'], $itemOptionIds);
+                foreach ($itemOptionIds as $oid) {
+                    if (!isset($stocks[$oid])) continue;
+                    $stock     = $stocks[$oid];
+                    // Other rows in this cart may also consume this option (different
+                    // pick combos for the same product) — count those too, but exclude
+                    // the row we're updating since $qty is its NEW value.
+                    $otherInCart = $this->carts->qtyInCartForOption(
+                        (int) $cart['id'], (int) $item['product_id'], $oid, $itemId
+                    );
+                    if ($stock < ($otherInCart + $qty)) {
+                        $remaining = max(0, $stock - $otherInCart);
+                        error("Only {$remaining} left for the selected option.", 422);
+                    }
+                }
+            } elseif ((int) $product['stock_qty'] < $qty) {
+                error('Not enough stock.', 422);
+            }
         }
 
         if (!$this->carts->updateItem($itemId, (int) $cart['id'], $qty)) {

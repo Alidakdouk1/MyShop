@@ -1,74 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   getAdminProduct, adminCreateProduct, adminUpdateProduct,
-  adminUploadImage, adminDeleteImage, adminAddVariant, adminDeleteVariant,
+  adminUploadImage, adminDeleteImage,
 } from '../../api/adminApi'
 import { getCategoriesFlat } from '../../api/productApi'
+import { saveProductFilters, buildFiltersPayload } from '../../api/filterApi'
+import ProductFiltersPicker from '../../components/admin/ProductFiltersPicker'
 import { useToast } from '../../hooks/useToast'
 import Input, { Textarea, Select } from '../../components/ui/Input'
 import Button from '../../components/ui/Button'
 import Spinner from '../../components/ui/Spinner'
 
-// ── Category-aware variant presets ────────────────────────────────────────────
-const PRESETS = {
-  clothing:    { label: 'Clothing Sizes',  options: ['XS','S','M','L','XL','XXL','XXXL','One Size'] },
-  shoes:       { label: 'Shoe Sizes (EU)', options: ['35','36','37','38','39','40','41','42','43','44','45','46'] },
-  beauty:      { label: 'Volume',          options: ['15ml','30ml','50ml','75ml','100ml','150ml','200ml'] },
-  storage:     { label: 'Storage',         options: ['64GB','128GB','256GB','512GB','1TB','2TB'] },
-  bags:        { label: 'Bag Sizes',       options: ['Mini','Small','Medium','Large','XL'] },
-  home:        { label: 'Sizes',           options: ['Small','Medium','Large','XL','XXL'] },
-}
-
-function getCatPreset(cat) {
-  if (!cat) return PRESETS.clothing
-  const n = `${cat.parent_name || ''} ${cat.name}`.toLowerCase()
-  if (/shoe|boot|sneaker/.test(n))                              return PRESETS.shoes
-  if (/beauty|skin|makeup|hair|perfume|cosmetic/.test(n))       return PRESETS.beauty
-  if (/electron|phone|laptop|tablet|watch/.test(n))             return PRESETS.storage
-  if (/bag/.test(n))                                            return PRESETS.bags
-  if (/home|garden|furniture|kitchen|bedding|decor/.test(n))   return PRESETS.home
-  return PRESETS.clothing
-}
-
-// ── Variant row ───────────────────────────────────────────────────────────────
-function VariantRow({ v, onDelete, deleting, pending }) {
-  const key = pending ? v._tempId : v.id
-  return (
-    <div
-      className="flex items-center gap-3 rounded-xl px-4 py-2.5"
-      style={{
-        background: pending ? '#FFFBEB' : 'var(--color-surface-alt, #F0EEE9)',
-        border: pending ? '1px dashed #D97706' : 'none',
-      }}
-    >
-      <span className="font-semibold text-sm text-ink min-w-[60px]">{v.size || '—'}</span>
-      {v.color && <span className="text-xs text-ink-secondary">{v.color}</span>}
-      <span className="text-xs text-ink-tertiary">Qty: {v.stock_qty}</span>
-      {v.price_modifier != null && Number(v.price_modifier) !== 0 && !isNaN(Number(v.price_modifier)) && (
-        <span className="text-xs text-ink-tertiary">
-          {Number(v.price_modifier) > 0 ? '+' : ''}${Number(v.price_modifier).toFixed(2)}
-        </span>
-      )}
-      <span className="text-xs text-ink-tertiary font-mono">{v.sku}</span>
-      {pending && (
-        <span className="text-[10px] font-bold uppercase tracking-wide ml-auto" style={{ color: '#D97706' }}>
-          pending
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={() => onDelete(key)}
-        disabled={!pending && deleting === v.id}
-        className="text-accent text-xs font-semibold hover:underline disabled:opacity-40 ml-auto"
-      >
-        {!pending && deleting === v.id ? '…' : 'Remove'}
-      </button>
-    </div>
-  )
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
 export default function AdminAddEditProduct() {
   const { id }   = useParams()
   const navigate = useNavigate()
@@ -82,25 +25,27 @@ export default function AdminAddEditProduct() {
   const [imageFile,        setImageFile]        = useState(null)
   const [preview,          setPreview]          = useState(null)
   const [existingImages,   setExistingImages]   = useState([])
-  const [variants,         setVariants]         = useState([])      // saved (from DB)
-  const [pendingVariants,  setPendingVariants]  = useState([])      // queued for creation
-  const [deletingVar,      setDeletingVar]      = useState(null)
   const [deletingImg,      setDeletingImg]      = useState(null)
-  const [addingVar,        setAddingVar]        = useState(false)
 
-  const [newVariant, setNewVariant] = useState({
-    size: '', color: '', stock_qty: '', price_modifier: '', sku: '',
-  })
+  const [filterSelections, setFilterSelections] = useState({})
 
   const [form, setForm] = useState({
     name: '', description: '', base_price: '', sale_price: '',
-    stock_qty: '', category_id: '', sku: '', status: 'active', is_featured: 0,
+    category_id: '', sku: '', status: 'active', is_featured: 0,
   })
   const [errors, setErrors] = useState({})
 
-  const selectedCat = categories.find(c => String(c.id) === String(form.category_id))
-  const hasSizes    = selectedCat?.has_sizes == 1
-  const preset      = getCatPreset(selectedCat)
+  // Total stock is the sum of every per-option quantity in enabled filters
+  const totalStock = useMemo(() => {
+    let sum = 0
+    Object.values(filterSelections || {}).forEach(sel => {
+      if (sel?.enabled === false) return
+      Object.values(sel?.quantities || {}).forEach(q => {
+        if (q !== '' && q != null && !Number.isNaN(Number(q))) sum += Number(q)
+      })
+    })
+    return sum
+  }, [filterSelections])
 
   useEffect(() => {
     getCategoriesFlat()
@@ -115,14 +60,12 @@ export default function AdminAddEditProduct() {
             description: p.description || '',
             base_price:  p.base_price  || '',
             sale_price:  p.sale_price  || '',
-            stock_qty:   p.stock_qty   || '',
             category_id: p.category_id || '',
             sku:         p.sku         || '',
             status:      p.status      || 'active',
             is_featured: p.is_featured || 0,
           })
           setExistingImages(p.images || [])
-          setVariants(p.variants || [])
           const primary = (p.images || []).find(i => i.is_primary) || (p.images || [])[0]
           if (primary) {
             const url = primary.image_url
@@ -145,9 +88,6 @@ export default function AdminAddEditProduct() {
     if (!form.base_price)  e.base_price  = 'Required'
     if (!form.sku.trim())  e.sku         = 'Required'
     if (!form.category_id) e.category_id = 'Select a category'
-    if (hasSizes && !isEdit && variants.length === 0 && pendingVariants.length === 0) {
-      e.variants = 'Add at least one variant before creating this product'
-    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -176,10 +116,11 @@ export default function AdminAddEditProduct() {
     setSaving(true)
     try {
       let productId = id || createdProductId
+      const payload = { ...form, stock_qty: totalStock }
       if (isEdit) {
-        await adminUpdateProduct(id, form)
+        await adminUpdateProduct(id, payload)
       } else if (!productId) {
-        const res = await adminCreateProduct(form)
+        const res = await adminCreateProduct(payload)
         productId = res.data?.data?.id
         if (!productId) throw new Error('Product was saved but no ID was returned — refresh and try again.')
         setCreatedProductId(productId)
@@ -189,60 +130,15 @@ export default function AdminAddEditProduct() {
         fd.append('image', imageFile)
         await adminUploadImage(productId, fd)
       }
-      for (const { _tempId, ...variantData } of pendingVariants) {
-        await adminAddVariant(productId, variantData)
+      if (productId) {
+        const payload = buildFiltersPayload(filterSelections)
+        await saveProductFilters(productId, payload)
       }
       toast.success(isEdit ? 'Product updated!' : 'Product created!')
       navigate('/admin/products')
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || 'Failed to save')
     } finally { setSaving(false) }
-  }
-
-  const handleAddVariant = async () => {
-    if (!newVariant.size)      return toast.error('Option / size is required')
-    if (!newVariant.stock_qty) return toast.error('Stock qty is required')
-    if (!newVariant.sku)       return toast.error('Variant SKU is required')
-
-    const savedId = id || createdProductId
-    if (savedId) {
-      setAddingVar(true)
-      try {
-        const { data } = await adminAddVariant(savedId, newVariant)
-        setVariants(v => [...v, { ...newVariant, id: data.data?.id }])
-        setNewVariant({ size: '', color: '', stock_qty: '', sku: '' })
-        toast.success('Variant added')
-      } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to add variant')
-      } finally { setAddingVar(false) }
-    } else {
-      setPendingVariants(v => [...v, { ...newVariant, _tempId: Date.now() }])
-      setNewVariant({ size: '', color: '', stock_qty: '', sku: '' })
-    }
-  }
-
-  const handleDeleteVariant = async (vid) => {
-    if (!confirm('Remove this variant?')) return
-    setDeletingVar(vid)
-    try {
-      await adminDeleteVariant(id, vid)
-      setVariants(v => v.filter(x => x.id !== vid))
-      toast.success('Variant removed')
-    } catch { toast.error('Cannot remove variant') }
-    finally { setDeletingVar(null) }
-  }
-
-  const removePending = (tempId) => {
-    setPendingVariants(v => v.filter(x => x._tempId !== tempId))
-  }
-
-  const pickSize = (size) => {
-    const base = form.sku.split('-').slice(0, 2).join('-') || form.sku || 'SKU'
-    setNewVariant(v => ({
-      ...v,
-      size,
-      sku: `${base}-${size.replace(/\s+/g, '')}`,
-    }))
   }
 
   if (loading) return (
@@ -345,19 +241,29 @@ export default function AdminAddEditProduct() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {!hasSizes && (
-              <Input
-                label="Stock Quantity" type="number"
-                value={form.stock_qty} onChange={e => set('stock_qty', e.target.value)}
-                placeholder="0"
-              />
-            )}
-            <Input
-              label="SKU" value={form.sku} onChange={e => set('sku', e.target.value)}
-              error={errors.sku} required placeholder="e.g. SHIRT-WHT"
-              className={hasSizes ? 'col-span-2' : ''}
-            />
+          <Input
+            label="SKU" value={form.sku} onChange={e => set('sku', e.target.value)}
+            error={errors.sku} required placeholder="e.g. SHIRT-WHT"
+          />
+
+          <div
+            className="rounded-xl px-4 py-3 flex items-center justify-between"
+            style={{ background: '#F0EEE9', border: '1px solid rgba(0,0,0,0.06)' }}
+          >
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#5C5854' }}>
+                Total stock
+              </p>
+              <p className="text-[11px] mt-0.5" style={{ color: '#9C9894' }}>
+                Sum of every quantity you set per filter option below
+              </p>
+            </div>
+            <p
+              className="text-2xl font-black"
+              style={{ color: '#0F0F0F', fontVariantNumeric: 'tabular-nums' }}
+            >
+              {totalStock}
+            </p>
           </div>
 
           <Select
@@ -385,134 +291,26 @@ export default function AdminAddEditProduct() {
           </div>
         </section>
 
-        {/* ── Variants ── */}
-        {hasSizes && (
-          <section className="bg-surface border border-border rounded-2xl p-5 space-y-4">
-            <div>
-              <p className="text-sm font-bold text-ink uppercase tracking-wide mb-1">Variants</p>
-              <p className="text-xs text-ink-tertiary">
-                Each variant gets its own stock and SKU. Variants added here will be saved when you
-                {isEdit ? ' save changes.' : ' create the product.'}
-              </p>
-              {errors.variants && (
-                <p className="text-xs text-red-500 mt-1 font-semibold">{errors.variants}</p>
-              )}
-            </div>
-
-            {/* Saved variants */}
-            {variants.length > 0 && (
-              <div className="space-y-2">
-                {variants.map(v => (
-                  <VariantRow
-                    key={v.id} v={v}
-                    onDelete={handleDeleteVariant}
-                    deleting={deletingVar}
-                    pending={false}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Pending variants (create mode) */}
-            {pendingVariants.length > 0 && (
-              <div className="space-y-2">
-                {pendingVariants.map(v => (
-                  <VariantRow
-                    key={v._tempId} v={v}
-                    onDelete={removePending}
-                    deleting={null}
-                    pending={true}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Add variant form */}
-            <div className="border border-border rounded-xl p-4 space-y-3">
-              <p className="text-xs font-bold text-ink-secondary uppercase tracking-wide">
-                Add Variant
-              </p>
-
-              {/* Category-specific quick-pick buttons */}
-              <div>
-                <p className="text-xs text-ink-tertiary mb-2">{preset.label}</p>
-                <div className="flex flex-wrap gap-2">
-                  {preset.options.map(s => (
-                    <button
-                      key={s} type="button"
-                      onClick={() => pickSize(s)}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors
-                        ${newVariant.size === s
-                          ? 'bg-ink text-white border-ink'
-                          : 'bg-surface border-border hover:border-ink/40'}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary mb-1 block">
-                    Option / Size *
-                  </label>
-                  <input
-                    value={newVariant.size}
-                    onChange={e => setNewVariant(v => ({ ...v, size: e.target.value }))}
-                    placeholder="e.g. XL, 42, 100ml…"
-                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-ink"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary mb-1 block">
-                    Color / Shade (optional)
-                  </label>
-                  <input
-                    value={newVariant.color}
-                    onChange={e => setNewVariant(v => ({ ...v, color: e.target.value }))}
-                    placeholder="e.g. White, Beige…"
-                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-ink"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary mb-1 block">
-                    Stock Qty for this variant *
-                  </label>
-                  <input
-                    type="number" value={newVariant.stock_qty}
-                    onChange={e => setNewVariant(v => ({ ...v, stock_qty: e.target.value }))}
-                    placeholder="e.g. 20"
-                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-ink"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-ink-secondary mb-1 block">
-                    Variant SKU *
-                  </label>
-                  <input
-                    value={newVariant.sku}
-                    onChange={e => setNewVariant(v => ({ ...v, sku: e.target.value }))}
-                    placeholder="e.g. SHIRT-WHT-XL"
-                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-ink"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="button" variant="secondary" size="sm"
-                loading={addingVar} onClick={handleAddVariant}
-              >
-                Add Variant
-              </Button>
-            </div>
-          </section>
-        )}
+        {/* ── Filters ── */}
+        <section className="bg-surface border border-border rounded-2xl p-5 space-y-4">
+          <div>
+            <p className="text-sm font-bold text-ink uppercase tracking-wide mb-1">Filters</p>
+            <p className="text-xs text-ink-tertiary">
+              Turn on a filter to apply it to this product, then pick the values that match.
+            </p>
+          </div>
+          <ProductFiltersPicker
+            value={filterSelections}
+            onChange={setFilterSelections}
+            productId={isEdit ? id : null}
+            categoryId={form.category_id || null}
+          />
+        </section>
 
         {/* ── Submit ── */}
         <div className="flex gap-3 pt-2">
           <Button type="submit" loading={saving} size="lg">
-            {isEdit ? 'Save Changes' : `Create Product${pendingVariants.length > 0 ? ` + ${pendingVariants.length} variant${pendingVariants.length > 1 ? 's' : ''}` : ''}`}
+            {isEdit ? 'Save Changes' : 'Create Product'}
           </Button>
           <Button type="button" variant="secondary" size="lg" onClick={() => navigate('/admin/products')}>
             Cancel

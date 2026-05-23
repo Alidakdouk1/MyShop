@@ -1,169 +1,92 @@
-import { useState, useEffect } from 'react'
-import { Select } from '../ui/Input'
+import { useState, useEffect, useMemo } from 'react'
+import { getFilters, serializeFilterParam } from '../../api/filterApi'
 
-const SORT_OPTIONS = [
-  { value: 'newest',       label: 'Newest First' },
-  { value: 'price_asc',    label: 'Price: Low to High' },
-  { value: 'price_desc',   label: 'Price: High to Low' },
-  { value: 'rating',       label: 'Top Rated' },
-  { value: 'bestselling',  label: 'Best Selling' },
-]
+// Parse the URL-friendly filters string back into { filterId: [optionId,...] }
+function parseFilterParam(str) {
+  if (!str) return {}
+  const out = {}
+  String(str).split(';').forEach(chunk => {
+    if (!chunk.includes(':')) return
+    const [fid, opts] = chunk.split(':')
+    const id = Number(fid)
+    if (!id) return
+    out[id] = (opts || '').split(',').map(Number).filter(Boolean)
+  })
+  return out
+}
+
+// Map common colour names → a CSS background for the swatch circle.
+const COLOR_SWATCHES = {
+  black: '#0F0F0F', white: '#FFFFFF', gray: '#9CA3AF', grey: '#9CA3AF',
+  beige: '#E8DCC4', brown: '#8B5A2B', khaki: '#C3B091', tan: '#D2B48C',
+  red: '#DC2626', burgundy: '#7B1F2B', maroon: '#7B1F2B',
+  pink: '#F4A6C0', 'hot pink': '#FF1493', rose: '#E11D63',
+  orange: '#F97316', yellow: '#FACC15', cream: '#FFF8E7',
+  green: '#16A34A', olive: '#808000', mint: '#A7F3D0', teal: '#14B8A6',
+  blue: '#2563EB', navy: '#1E2A52', 'light blue': '#7DD3FC', 'sky blue': '#7DD3FC',
+  purple: '#7C3AED', lavender: '#C4B5FD', violet: '#8B5CF6',
+  gold: '#D4AF37', silver: '#C0C0C0',
+  multicolor: 'conic-gradient(from 0deg, #ef4444, #f59e0b, #facc15, #22c55e, #3b82f6, #8b5cf6, #ef4444)',
+}
+
+const swatchFor = (value) => COLOR_SWATCHES[String(value).trim().toLowerCase()] || null
+
+// A filter is treated as a colour swatch picker when its name mentions "color"
+// and at least some of its values are recognised colours.
+const isColorFilter = (f) =>
+  /colou?r/i.test(f.name) &&
+  (f.options || []).some(o => swatchFor(o.value))
 
 export default function ProductFilters({ filters, onChange, categories = [] }) {
-  const [priceMin, setPriceMin] = useState(filters.price_min || '')
-  const [priceMax, setPriceMax] = useState(filters.price_max || '')
-  const [openParent, setOpenParent] = useState(null)
+  const [priceMin, setPriceMin]     = useState(filters.price_min || '')
+  const [priceMax, setPriceMax]     = useState(filters.price_max || '')
+  const [openSections, setOpen]     = useState({ price: true, other: true })
+  const [dynamicFilters, setDynamicFilters] = useState([])
+  const [openDynamic, setOpenDynamic] = useState({})  // { [filterId]: bool }
 
-  // Build hierarchy from flat list
-  const parents  = categories.filter(c => !c.parent_id)
-  const childMap = {}
-  categories.filter(c => c.parent_id).forEach(c => {
-    if (!childMap[c.parent_id]) childMap[c.parent_id] = []
-    childMap[c.parent_id].push(c)
-  })
+  const categoryId = filters.category_id || ''
 
-  // Auto-expand the parent of the currently active subcategory
+  // Load the filters for the currently open category (or all when none selected)
   useEffect(() => {
-    if (!filters.category_id) { setOpenParent(null); return }
-    const active = categories.find(c => String(c.id) === String(filters.category_id))
-    if (active?.parent_id) setOpenParent(active.parent_id)
-    else setOpenParent(Number(filters.category_id))
-  }, [filters.category_id, categories])
+    getFilters(categoryId)
+      .then(r => {
+        const list = r.data.data || []
+        setDynamicFilters(list)
+        // First three filters open by default
+        const initial = {}
+        list.slice(0, 3).forEach(f => { initial[f.id] = true })
+        setOpenDynamic(initial)
+      })
+      .catch(() => setDynamicFilters([]))
+  }, [categoryId])
 
-  const handleParentClick = (parent) => {
-    const children = childMap[parent.id] || []
-    // Toggle expand; always filter by this parent category
-    setOpenParent(prev => prev === parent.id ? null : parent.id)
-    onChange({ ...filters, category_id: parent.id, page: 1 })
-  }
+  const selectedByFilter = useMemo(() => parseFilterParam(filters.filters), [filters.filters])
 
-  const handleAllClick = () => {
-    setOpenParent(null)
-    onChange({ ...filters, category_id: undefined, page: 1 })
-  }
+  const toggleSection = (key) => setOpen(s => ({ ...s, [key]: !s[key] }))
+  const toggleDynamic = (id)  => setOpenDynamic(s => ({ ...s, [id]: !s[id] }))
 
-  const apply = () => {
+  const applyPrice = () => {
     onChange({ ...filters, price_min: priceMin || undefined, price_max: priceMax || undefined, page: 1 })
   }
 
+  const setDynamicSelection = (filterId, optionId, isMulti) => {
+    const next = { ...selectedByFilter }
+    const current = next[filterId] || []
+    if (isMulti) {
+      next[filterId] = current.includes(optionId)
+        ? current.filter(x => x !== optionId)
+        : [...current, optionId]
+    } else {
+      next[filterId] = current[0] === optionId ? [] : [optionId]
+    }
+    if (!next[filterId].length) delete next[filterId]
+    onChange({ ...filters, filters: serializeFilterParam(next) || undefined, page: 1 })
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Category */}
-      {categories.length > 0 && (
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-ink-tertiary mb-3">Category</p>
-          <div className="flex flex-col gap-0.5">
-
-            {/* All Categories */}
-            <button
-              onClick={handleAllClick}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
-                ${!filters.category_id
-                  ? 'bg-ink text-white font-semibold'
-                  : 'text-ink-secondary hover:bg-surface-alt hover:text-ink'}`}
-            >
-              All Categories
-            </button>
-
-            {/* Parent categories + expandable subcategories */}
-            {parents.map(parent => {
-              const children  = childMap[parent.id] || []
-              const isOpen    = openParent === parent.id
-              const isActive  = String(filters.category_id) === String(parent.id)
-
-              // Support both image_url (admin API) and image (public API)
-              const imgRaw = parent.image_url || parent.image
-              const imgSrc = imgRaw
-                ? (imgRaw.startsWith('http') || imgRaw.startsWith('/') ? imgRaw : `/MyShop/backend/${imgRaw}`)
-                : null
-
-              return (
-                <div key={parent.id}>
-                  <button
-                    onClick={() => handleParentClick(parent)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 flex items-center justify-between gap-2
-                      ${isActive
-                        ? 'bg-ink text-white font-semibold'
-                        : 'text-ink-secondary hover:bg-surface-alt hover:text-ink'}`}
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      {imgSrc ? (
-                        <img
-                          src={imgSrc}
-                          alt={parent.name}
-                          className="w-5 h-5 rounded-full object-cover shrink-0 border border-white/20"
-                        />
-                      ) : (
-                        <div className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-[9px] font-bold uppercase transition-colors
-                          ${isActive ? 'bg-white/20 text-white' : 'bg-surface-alt text-ink-tertiary'}`}>
-                          {parent.name[0]}
-                        </div>
-                      )}
-                      <span className="truncate">{parent.name}</span>
-                    </span>
-                    {children.length > 0 && (
-                      <svg
-                        className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${isActive ? 'text-white/70' : 'text-ink-tertiary'}`}
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    )}
-                  </button>
-
-                  {/* Subcategories — slide open */}
-                  {isOpen && children.length > 0 && (
-                    <div className="ml-3 mt-0.5 mb-1 border-l-2 border-border pl-2 flex flex-col gap-0.5">
-                      {children.map(child => {
-                        const childImgRaw = child.image_url || child.image
-                        const childImgSrc = childImgRaw
-                          ? (childImgRaw.startsWith('http') || childImgRaw.startsWith('/') ? childImgRaw : `/MyShop/backend/${childImgRaw}`)
-                          : null
-                        const childActive = String(filters.category_id) === String(child.id)
-                        return (
-                          <button
-                            key={child.id}
-                            onClick={() => onChange({ ...filters, category_id: child.id, page: 1 })}
-                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition-all duration-150 flex items-center gap-2
-                              ${childActive
-                                ? 'bg-ink text-white font-semibold'
-                                : 'text-ink-secondary hover:bg-surface-alt hover:text-ink'}`}
-                          >
-                            {childImgSrc ? (
-                              <img src={childImgSrc} alt={child.name} className="w-4 h-4 rounded-full object-cover shrink-0" />
-                            ) : (
-                              <div className={`w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-bold uppercase
-                                ${childActive ? 'bg-white/20 text-white' : 'bg-surface-alt text-ink-tertiary'}`}>
-                                {child.name[0]}
-                              </div>
-                            )}
-                            <span className="truncate">{child.name}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Sort */}
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-ink-tertiary mb-3">Sort By</p>
-        <Select
-          value={filters.sort || 'newest'}
-          onChange={e => onChange({ ...filters, sort: e.target.value, page: 1 })}
-        >
-          {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </Select>
-      </div>
-
+    <div className="space-y-5">
       {/* Price range */}
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-ink-tertiary mb-3">Price Range</p>
+      <FilterSection title="Price Range" open={openSections.price} onToggle={() => toggleSection('price')}>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -182,23 +105,190 @@ export default function ProductFilters({ filters, onChange, categories = [] }) {
           />
         </div>
         <button
-          onClick={apply}
+          onClick={applyPrice}
           className="mt-3 w-full bg-ink text-white text-sm font-semibold py-2 rounded-lg hover:bg-ink/80 transition-colors"
         >
           Apply
         </button>
-      </div>
+      </FilterSection>
 
-      {/* In stock */}
-      <label className="flex items-center gap-3 cursor-pointer select-none">
+      {/* Dynamic admin-managed filters (Size, Color, Material, …) */}
+      {dynamicFilters.map(f => {
+        // Range filters can't be selected from option ids — they're set per-product.
+        // We still show the section header but with a per-filter min/max input.
+        if (f.type === 'range') {
+          return (
+            <DynamicRangeFilter
+              key={f.id}
+              filter={f}
+              filters={filters}
+              onChange={onChange}
+              open={openDynamic[f.id]}
+              onToggle={() => toggleDynamic(f.id)}
+            />
+          )
+        }
+        if (!(f.options || []).length) return null
+        const selected = selectedByFilter[f.id] || []
+        const isMulti  = f.type !== 'single'
+
+        return (
+          <FilterSection
+            key={f.id}
+            title={f.name}
+            open={openDynamic[f.id]}
+            onToggle={() => toggleDynamic(f.id)}
+          >
+            {isColorFilter(f) ? (
+              // Colour swatches — small circles in their own colour
+              <div className="flex flex-wrap gap-2.5">
+                {f.options.map(o => {
+                  const checked = selected.includes(o.id)
+                  const bg      = swatchFor(o.value) || '#E4E1D9'
+                  const isWhite = bg.toUpperCase() === '#FFFFFF' || /cream/i.test(o.value)
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      title={o.value}
+                      aria-label={o.value}
+                      onClick={() => setDynamicSelection(f.id, o.id, isMulti)}
+                      className="relative w-7 h-7 rounded-full transition-transform hover:scale-110"
+                      style={{
+                        background: bg,
+                        boxShadow: checked
+                          ? '0 0 0 2px #fff, 0 0 0 4px #0F0F0F'
+                          : isWhite ? 'inset 0 0 0 1px rgba(0,0,0,0.15)' : 'none',
+                      }}
+                    >
+                      {checked && (
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="absolute inset-0 m-auto w-3.5 h-3.5"
+                          fill="none"
+                          stroke={isWhite ? '#0F0F0F' : '#fff'}
+                          strokeWidth={3}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              // Everything else — 3 selectable pills per row
+              <div className="grid grid-cols-3 gap-2">
+                {f.options.map(o => {
+                  const checked = selected.includes(o.id)
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      title={`${o.value}${f.unit ? ` ${f.unit}` : ''}`}
+                      onClick={() => setDynamicSelection(f.id, o.id, isMulti)}
+                      className={`text-xs font-semibold px-1 py-2 rounded-lg border text-center truncate transition-colors
+                        ${checked
+                          ? 'bg-ink text-white border-ink'
+                          : 'bg-surface border-border text-ink-secondary hover:border-ink/40'}`}
+                    >
+                      {o.value}{f.unit ? ` ${f.unit}` : ''}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </FilterSection>
+        )
+      })}
+
+      {/* Other toggles */}
+      <FilterSection title="Other" open={openSections.other} onToggle={() => toggleSection('other')}>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.in_stock || false}
+              onChange={e => onChange({ ...filters, in_stock: e.target.checked || undefined, page: 1 })}
+              className="w-4 h-4 rounded border-border accent-ink cursor-pointer"
+            />
+            <span className="text-sm font-medium text-ink">In Stock Only</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={!!filters.on_sale}
+              onChange={e => onChange({ ...filters, on_sale: e.target.checked ? '1' : '', page: 1 })}
+              className="w-4 h-4 rounded border-border accent-ink cursor-pointer"
+            />
+            <span className="text-sm font-medium text-ink">On Sale</span>
+          </label>
+        </div>
+      </FilterSection>
+    </div>
+  )
+}
+
+// Range filter rendered as a min/max pair under its own collapsible section
+function DynamicRangeFilter({ filter, filters, onChange, open, onToggle }) {
+  const keyMin = `f_${filter.id}_min`
+  const keyMax = `f_${filter.id}_max`
+  const [min, setMin] = useState(filters[keyMin] || '')
+  const [max, setMax] = useState(filters[keyMax] || '')
+
+  const apply = () => {
+    onChange({
+      ...filters,
+      [keyMin]: min || undefined,
+      [keyMax]: max || undefined,
+      page: 1,
+    })
+  }
+
+  return (
+    <FilterSection title={filter.name} open={open} onToggle={onToggle}>
+      <div className="flex items-center gap-2">
         <input
-          type="checkbox"
-          checked={filters.in_stock || false}
-          onChange={e => onChange({ ...filters, in_stock: e.target.checked || undefined, page: 1 })}
-          className="w-4 h-4 rounded border-border accent-ink cursor-pointer"
+          type="number"
+          placeholder={filter.unit ? `Min (${filter.unit})` : 'Min'}
+          value={min}
+          onChange={e => setMin(e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm text-ink outline-none focus:border-ink"
         />
-        <span className="text-sm font-medium text-ink">In Stock Only</span>
-      </label>
+        <span className="text-ink-tertiary">–</span>
+        <input
+          type="number"
+          placeholder={filter.unit ? `Max (${filter.unit})` : 'Max'}
+          value={max}
+          onChange={e => setMax(e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm text-ink outline-none focus:border-ink"
+        />
+      </div>
+      <button
+        onClick={apply}
+        className="mt-3 w-full bg-ink text-white text-sm font-semibold py-2 rounded-lg hover:bg-ink/80 transition-colors"
+      >
+        Apply
+      </button>
+    </FilterSection>
+  )
+}
+
+function FilterSection({ title, open, onToggle, children }) {
+  return (
+    <div className="border-b border-border pb-4 last:border-b-0 last:pb-0">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between mb-3 group"
+      >
+        <p className="text-xs font-bold uppercase tracking-widest text-ink-tertiary group-hover:text-ink transition-colors">
+          {title}
+        </p>
+        <span className="text-ink-tertiary text-lg leading-none group-hover:text-ink transition-colors">
+          {open ? '−' : '+'}
+        </span>
+      </button>
+      {open && children}
     </div>
   )
 }

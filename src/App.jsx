@@ -9,10 +9,8 @@ import Layout from './components/layout/Layout'
 import AdminLayout from './components/layout/AdminLayout'
 import ProtectedRoute from './components/common/ProtectedRoute'
 
-// Redirect admins away from all customer-facing pages
+// Block guests from auth-only pages; admins can browse freely
 function CustomerRoute({ children }) {
-  const user = useSelector(selectUser)
-  if (user?.role === 'admin') return <Navigate to="/admin" replace />
   return children
 }
 
@@ -39,6 +37,8 @@ import AdminProducts       from './pages/admin/AdminProducts'
 import AdminAdmins         from './pages/admin/AdminAdmins'
 import AdminAddEditProduct from './pages/admin/AddEditProduct'
 import AdminHomepage       from './pages/admin/AdminHomepage'
+import AdminShopPage       from './pages/admin/AdminShopPage'
+import AdminFilters        from './pages/admin/AdminFilters'
 
 function AppInit() {
   const dispatch = useDispatch()
@@ -63,7 +63,7 @@ export default function App() {
       <AppInit />
       <Routes>
         {/* Customer-only — admins are redirected to /admin */}
-        <Route path="/"               element={<CustomerRoute><Layout><Home /></Layout></CustomerRoute>} />
+        <Route path="/"               element={<Layout><Home /></Layout>} />
         <Route path="/shop"           element={<CustomerRoute><Layout><Shop /></Layout></CustomerRoute>} />
         <Route path="/products/:slug" element={<CustomerRoute><Layout><ProductDetail /></Layout></CustomerRoute>} />
         <Route path="/cart"           element={<CustomerRoute><Layout><Cart /></Layout></CustomerRoute>} />
@@ -84,9 +84,11 @@ export default function App() {
         <Route path="/admin/orders"            element={<ProtectedRoute role="admin"><AdminLayout><AdminOrders /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/products"          element={<ProtectedRoute role="admin"><AdminLayout><AdminProducts /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/categories"        element={<ProtectedRoute role="admin"><AdminLayout><AdminCategories /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/filters"           element={<ProtectedRoute role="admin"><AdminLayout><AdminFilters /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/products/new"      element={<ProtectedRoute role="admin"><AdminLayout><AdminAddEditProduct /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/products/:id/edit" element={<ProtectedRoute role="admin"><AdminLayout><AdminAddEditProduct /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/homepage"          element={<ProtectedRoute role="admin"><AdminLayout><AdminHomepage /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/shop"             element={<ProtectedRoute role="admin"><AdminLayout><AdminShopPage /></AdminLayout></ProtectedRoute>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>

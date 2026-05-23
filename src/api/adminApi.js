@@ -38,6 +38,12 @@ export const updateAdminCategory   = (id, data)   => api.put(`/admin/categories/
 export const deleteAdminCategory   = (id)         => api.delete(`/admin/categories/${id}`)
 export const uploadCategoryImage   = (formData)   => api.post('/admin/homepage-images', formData)
 
+// Category sections ("others" blocks shown beside the sub-categories in the menu)
+export const getAdminSections      = ()           => api.get('/admin/sections')
+export const createCategorySection = (catId, data)=> api.post(`/admin/categories/${catId}/sections`, data)
+export const updateCategorySection = (id, data)   => api.put(`/admin/sections/${id}`, data)
+export const deleteCategorySection = (id)         => api.delete(`/admin/sections/${id}`)
+
 // Coupons
 export const getAdminCoupons   = ()           => api.get('/admin/coupons')
 export const createCoupon      = (data)       => api.post('/admin/coupons', data)

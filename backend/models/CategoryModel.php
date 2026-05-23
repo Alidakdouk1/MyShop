@@ -17,7 +17,7 @@ class CategoryModel extends BaseModel
     public function flat(): array
     {
         $all = $this->query(
-            "SELECT c.id, c.name, c.slug, c.has_sizes, c.parent_id, p.name AS parent_name
+            "SELECT c.id, c.name, c.slug, c.has_sizes, c.parent_id, c.section_id, c.image_url, p.name AS parent_name
              FROM categories c
              LEFT JOIN categories p ON p.id = c.parent_id
              ORDER BY COALESCE(p.sort_order, c.sort_order) ASC, c.sort_order ASC"
@@ -41,10 +41,11 @@ class CategoryModel extends BaseModel
     public function create(array $data): int
     {
         $this->query(
-            "INSERT INTO categories (parent_id, name, slug, image_url, sort_order, has_sizes)
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO categories (parent_id, section_id, name, slug, image_url, sort_order, has_sizes)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
-                $data['parent_id'] ?? null,
+                $data['parent_id']  ?? null,
+                $data['section_id'] ?? null,
                 $data['name'],
                 $data['slug'],
                 $data['image_url'] ?? null,
@@ -58,7 +59,7 @@ class CategoryModel extends BaseModel
     public function update(int $id, array $data): bool
     {
         $sets = []; $params = [];
-        foreach (['parent_id', 'name', 'slug', 'image_url', 'sort_order', 'has_sizes'] as $f) {
+        foreach (['parent_id', 'section_id', 'name', 'slug', 'image_url', 'sort_order', 'has_sizes'] as $f) {
             if (array_key_exists($f, $data)) {
                 $sets[]   = "`{$f}` = ?";
                 $params[] = $data[$f];

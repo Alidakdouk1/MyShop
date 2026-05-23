@@ -50,6 +50,14 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/filters', label: 'Filters',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L12 11.414V16a1 1 0 01-1.447.894L8.553 15.94A1 1 0 018 15v-3.586L3.293 6.707A1 1 0 013 6V4z" clipRule="evenodd"/>
+      </svg>
+    ),
+  },
+  {
     to: '/admin/orders', label: 'Orders',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -63,6 +71,14 @@ const NAV = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
         <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/shop', label: 'Shop Page',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M3 5a1 1 0 000 2h1v8a2 2 0 002 2h8a2 2 0 002-2V7h1a1 1 0 100-2H3zm3 2h8v8H6V7zm2 2a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clipRule="evenodd"/>
       </svg>
     ),
   },

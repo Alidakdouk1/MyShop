@@ -5,7 +5,12 @@ import {
   updateAdminCategory,
   deleteAdminCategory,
   uploadCategoryImage,
+  getAdminSections,
+  createCategorySection,
+  updateCategorySection,
+  deleteCategorySection,
 } from '../../api/adminApi'
+import { getAdminFilters, getCategoryFilters, saveCategoryFilters } from '../../api/filterApi'
 import { useToast } from '../../hooks/useToast'
 import Spinner from '../../components/ui/Spinner'
 import Modal from '../../components/ui/Modal'
@@ -147,16 +152,40 @@ function CategoryImageUploader({ value, onChange, onUploadingChange }) {
 }
 
 // ── Category form (add / edit) ───────────────────────────────────────────────
-function CategoryForm({ initial, topLevelCats, onSave, onCancel, saving }) {
+function CategoryForm({ initial, topLevelCats, allFilters, sectionsByCat = {}, onSave, onCancel, saving }) {
   const [form, setForm] = useState({
     name:       initial?.name       ?? '',
     parent_id:  initial?.parent_id  ?? '',
+    section_id: initial?.section_id ?? '',
     sort_order: initial?.sort_order ?? 0,
     has_sizes:  Number(initial?.has_sizes) === 1,
     image_url:  initial?.image_url  ?? '',
   })
+
+  // Sections only make sense for a sub-category — they belong to the chosen parent.
+  const parentSections = form.parent_id !== ''
+    ? (sectionsByCat[Number(form.parent_id)] || [])
+    : []
   const [errors, setErrors]           = useState({})
   const [imageUploading, setImageUploading] = useState(false)
+  const [filterIds, setFilterIds]     = useState([])
+
+  const categoryId = initial?.id || null
+  const parentId   = initial?.parent_id ?? null
+
+  // Editing an existing category → load its own filters.
+  // Creating a NEW sub-category → start from a one-time copy of the parent's
+  // filters (the admin can change them here without affecting the parent).
+  useEffect(() => {
+    const sourceId = categoryId || parentId
+    if (!sourceId) return
+    getCategoryFilters(sourceId)
+      .then(r => setFilterIds((r.data.data || []).map(Number)))
+      .catch(() => setFilterIds([]))
+  }, [categoryId, parentId])
+
+  const toggleFilter = (id) =>
+    setFilterIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }))
@@ -176,9 +205,11 @@ function CategoryForm({ initial, topLevelCats, onSave, onCancel, saving }) {
     onSave({
       name:       form.name.trim(),
       parent_id:  form.parent_id !== '' ? Number(form.parent_id) : null,
+      section_id: form.parent_id !== '' && form.section_id !== '' ? Number(form.section_id) : null,
       sort_order: Number(form.sort_order),
       has_sizes:  form.has_sizes ? 1 : 0,
       image_url:  form.image_url.trim(),
+      filter_ids: filterIds,
     })
   }
 
@@ -209,7 +240,7 @@ function CategoryForm({ initial, topLevelCats, onSave, onCancel, saving }) {
         </label>
         <select
           value={form.parent_id}
-          onChange={e => set('parent_id', e.target.value)}
+          onChange={e => setForm(f => ({ ...f, parent_id: e.target.value, section_id: '' }))}
           className={inputCls(false) + ' appearance-none cursor-pointer'}
           style={{ background: '#fff' }}
         >
@@ -219,6 +250,29 @@ function CategoryForm({ initial, topLevelCats, onSave, onCancel, saving }) {
           ))}
         </select>
       </div>
+
+      {/* Section ("others" block) — only for sub-categories whose parent has sections */}
+      {form.parent_id !== '' && parentSections.length > 0 && (
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#5C5854' }}>
+            Section
+          </label>
+          <select
+            value={form.section_id}
+            onChange={e => set('section_id', e.target.value)}
+            className={inputCls(false) + ' appearance-none cursor-pointer'}
+            style={{ background: '#fff' }}
+          >
+            <option value="">— Main block (no section) —</option>
+            {parentSections.map(s => (
+              <option key={s.id} value={s.id}>{s.title}</option>
+            ))}
+          </select>
+          <p className="text-[11px] mt-1" style={{ color: '#9C9894' }}>
+            Choose which titled block this shows under in the menu, or leave as the main block.
+          </p>
+        </div>
+      )}
 
       {/* Sort order */}
       <div>
@@ -259,6 +313,48 @@ function CategoryForm({ initial, topLevelCats, onSave, onCancel, saving }) {
         </div>
       </label>
 
+      {/* Sidebar filters for this category */}
+      <div>
+        <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#5C5854' }}>
+          Sidebar Filters
+        </label>
+        <p className="text-[11px] mb-2" style={{ color: '#9C9894' }}>
+          Pick which filters show on the left when a customer opens this category.
+          {!categoryId && parentId
+            ? ' Pre-filled from the parent category — change them freely; the parent stays as is.'
+            : ' Each category is independent — editing these does not change other categories.'}
+        </p>
+        {allFilters.length === 0 ? (
+          <p className="text-xs italic" style={{ color: '#9C9894' }}>No filters defined yet.</p>
+        ) : (
+          <div
+            className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto rounded-xl p-2.5"
+            style={{ border: '1px solid rgba(0,0,0,0.1)', background: '#FAFAF8' }}
+          >
+            {allFilters.map(f => {
+              const checked = filterIds.includes(f.id)
+              return (
+                <label
+                  key={f.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer select-none transition-colors"
+                  style={{ background: checked ? '#fff' : 'transparent' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleFilter(f.id)}
+                    className="w-4 h-4 rounded accent-ink cursor-pointer shrink-0"
+                  />
+                  <span className="text-xs font-medium truncate" style={{ color: '#0F0F0F' }} title={f.name}>
+                    {f.name}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Actions */}
       <div className="flex gap-2.5 pt-2">
         <button
@@ -268,6 +364,73 @@ function CategoryForm({ initial, topLevelCats, onSave, onCancel, saving }) {
           style={{ background: '#0F0F0F' }}
         >
           {imageUploading ? 'Uploading…' : saving ? 'Saving…' : initial ? 'Save Changes' : 'Create Category'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 text-sm font-bold py-2.5 rounded-xl transition-all hover:opacity-80"
+          style={{ background: '#F0EEE9', color: '#0F0F0F' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// ── Section form (add / rename a titled "others" block) ──────────────────────
+function SectionForm({ initial, onSave, onCancel, saving }) {
+  const [title, setTitle]         = useState(initial?.title ?? '')
+  const [sortOrder, setSortOrder] = useState(initial?.sort_order ?? 0)
+  const [err, setErr]             = useState('')
+
+  const handleSubmit = (ev) => {
+    ev.preventDefault()
+    if (!title.trim()) { setErr('Title is required'); return }
+    onSave({ title: title.trim(), sort_order: Number(sortOrder) })
+  }
+
+  const inputCls =
+    `w-full rounded-xl border text-sm outline-none px-3.5 py-2.5 transition-all
+     ${err ? 'border-[#C0392B] ring-2 ring-[#C0392B]/10' : 'border-[rgba(0,0,0,0.1)] focus:border-[#0F0F0F] focus:ring-2 focus:ring-black/10'}`
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+      <div>
+        <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#5C5854' }}>
+          Section Title <span style={{ color: '#C0392B' }}>*</span>
+        </label>
+        <input
+          value={title}
+          onChange={e => { setTitle(e.target.value); setErr('') }}
+          placeholder="e.g. New in Curve Clothing"
+          className={inputCls}
+        />
+        {err && <p className="text-xs mt-1" style={{ color: '#C0392B' }}>{err}</p>}
+      </div>
+      <div>
+        <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#5C5854' }}>
+          Sort Order
+        </label>
+        <input
+          type="number"
+          min={0}
+          value={sortOrder}
+          onChange={e => setSortOrder(e.target.value)}
+          className="w-full rounded-xl border text-sm outline-none px-3.5 py-2.5 transition-all border-[rgba(0,0,0,0.1)] focus:border-[#0F0F0F] focus:ring-2 focus:ring-black/10"
+        />
+        <p className="text-[11px] mt-1" style={{ color: '#9C9894' }}>
+          Lower numbers show first (left to right) in the menu.
+        </p>
+      </div>
+      <div className="flex gap-2.5 pt-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="flex-1 text-sm font-bold py-2.5 rounded-xl text-white transition-all hover:opacity-90 disabled:opacity-50"
+          style={{ background: '#0F0F0F' }}
+        >
+          {saving ? 'Saving…' : initial ? 'Save Section' : 'Create Section'}
         </button>
         <button
           type="button"
@@ -340,10 +503,16 @@ function SubCatRow({ cat, onEdit, onDelete, deleting }) {
 }
 
 // ── Top-level category card ──────────────────────────────────────────────────
-function TopCatCard({ cat, children, onEdit, onDelete, onAddSub, deleting, colorIdx }) {
+function TopCatCard({
+  cat, mainChildren = [], sections = [], childrenBySection = {},
+  onEdit, onDelete, onAddSub, deleting, colorIdx,
+  onAddSection, onEditSection, onDeleteSection,
+}) {
   const [open, setOpen] = useState(true)
   const color = PALETTE[colorIdx % PALETTE.length]
-  const childCount = children.length
+  const sectionChildCount = sections.reduce((s, sec) => s + (childrenBySection[sec.id]?.length || 0), 0)
+  const childCount = mainChildren.length + sectionChildCount
+  const expandable = childCount > 0 || sections.length > 0
 
   return (
     <div
@@ -353,7 +522,7 @@ function TopCatCard({ cat, children, onEdit, onDelete, onAddSub, deleting, color
       {/* Header row */}
       <div
         className="group flex items-center gap-4 px-5 py-4 cursor-pointer select-none transition-colors"
-        onClick={() => childCount > 0 && setOpen(o => !o)}
+        onClick={() => expandable && setOpen(o => !o)}
         onMouseEnter={e => e.currentTarget.style.background = '#FAFAF8'}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
       >
@@ -382,6 +551,11 @@ function TopCatCard({ cat, children, onEdit, onDelete, onAddSub, deleting, color
                 {childCount} sub-{childCount === 1 ? 'category' : 'categories'}
               </span>
             )}
+            {sections.length > 0 && (
+              <span className="text-xs font-semibold" style={{ color: color }}>
+                {sections.length} section{sections.length === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
         </div>
 
@@ -399,13 +573,22 @@ function TopCatCard({ cat, children, onEdit, onDelete, onAddSub, deleting, color
         {/* Action buttons (stop propagation) */}
         <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
           <button
-            onClick={() => onAddSub(cat)}
-            title="Add sub-category"
+            onClick={() => onAddSub(cat, null)}
+            title="Add sub-category to the main block"
             className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
             style={{ background: `${color}14`, color }}
           >
             {Icon.plus}
             <span className="hidden sm:inline">Sub</span>
+          </button>
+          <button
+            onClick={() => onAddSection(cat)}
+            title="Add a titled section (others)"
+            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
+            style={{ background: '#F0EEE9', color: '#0F0F0F' }}
+          >
+            {Icon.plus}
+            <span className="hidden sm:inline">Section</span>
           </button>
           <button
             onClick={() => onEdit(cat)}
@@ -427,7 +610,7 @@ function TopCatCard({ cat, children, onEdit, onDelete, onAddSub, deleting, color
         </div>
 
         {/* Chevron */}
-        {childCount > 0 && (
+        {expandable && (
           <div
             className="shrink-0 transition-transform duration-200"
             style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: '#C4C0BB' }}
@@ -437,22 +620,112 @@ function TopCatCard({ cat, children, onEdit, onDelete, onAddSub, deleting, color
         )}
       </div>
 
-      {/* Sub-categories */}
-      {open && childCount > 0 && (
+      {/* Sub-categories (main block) + sections ("others") side by side */}
+      {open && expandable && (
         <div
-          className="px-4 pb-3 space-y-1"
+          className="grid grid-cols-1 lg:grid-cols-[3fr_7fr] gap-4 px-4 py-3"
           style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}
         >
-          <div className="pt-2" />
-          {children.map(child => (
-            <SubCatRow
-              key={child.id}
-              cat={child}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              deleting={deleting}
-            />
-          ))}
+          {/* Left: main block */}
+          <div className="min-w-0">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#9C9894' }}>
+                Main block
+              </span>
+              <button
+                onClick={() => onAddSub(cat, null)}
+                className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg transition-all hover:opacity-80"
+                style={{ background: `${color}14`, color }}
+              >
+                {Icon.plus} Add
+              </button>
+            </div>
+            <div className="space-y-1">
+              {mainChildren.length === 0 ? (
+                <p className="text-xs italic px-1 py-2" style={{ color: '#C4C0BB' }}>
+                  No subcategories in the main block yet.
+                </p>
+              ) : mainChildren.map(child => (
+                <SubCatRow key={child.id} cat={child} onEdit={onEdit} onDelete={onDelete} deleting={deleting} />
+              ))}
+            </div>
+          </div>
+
+          {/* Right: "others" sections */}
+          <div className="min-w-0">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#9C9894' }}>
+                Sections (others)
+              </span>
+              <button
+                onClick={() => onAddSection(cat)}
+                className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg transition-all hover:opacity-80"
+                style={{ background: '#F0EEE9', color: '#0F0F0F' }}
+              >
+                {Icon.plus} Add section
+              </button>
+            </div>
+
+            {sections.length === 0 ? (
+              <p className="text-xs italic px-1 py-2" style={{ color: '#C4C0BB' }}>
+                No sections yet. Add one to show a titled block beside the main subcategories.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {sections.map(sec => {
+                  const secChildren = childrenBySection[sec.id] || []
+                  return (
+                    <div
+                      key={sec.id}
+                      className="rounded-xl p-2.5"
+                      style={{ background: '#FAFAF8', border: '1px solid rgba(0,0,0,0.06)' }}
+                    >
+                      {/* Section header */}
+                      <div className="group flex items-center gap-2 mb-1.5 px-1">
+                        <span className="text-sm font-bold flex-1 truncate" style={{ color: '#0F0F0F' }}>
+                          {sec.title}
+                        </span>
+                        <button
+                          onClick={() => onAddSub(cat, sec.id)}
+                          title="Add subcategory to this section"
+                          className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg transition-all hover:opacity-80"
+                          style={{ background: `${color}14`, color }}
+                        >
+                          {Icon.plus}
+                        </button>
+                        <button
+                          onClick={() => onEditSection(sec)}
+                          title="Rename section"
+                          className="p-1.5 rounded-lg transition-all hover:opacity-80"
+                          style={{ background: '#F0EEE9', color: '#0F0F0F' }}
+                        >
+                          {Icon.edit}
+                        </button>
+                        <button
+                          onClick={() => onDeleteSection(sec)}
+                          title="Delete section"
+                          className="p-1.5 rounded-lg transition-all hover:opacity-80"
+                          style={{ background: '#FEF2F2', color: '#C0392B' }}
+                        >
+                          {Icon.trash}
+                        </button>
+                      </div>
+                      {/* Section children */}
+                      <div className="space-y-1">
+                        {secChildren.length === 0 ? (
+                          <p className="text-[11px] italic px-1 py-1" style={{ color: '#C4C0BB' }}>
+                            Empty — add subcategories to this section.
+                          </p>
+                        ) : secChildren.map(child => (
+                          <SubCatRow key={child.id} cat={child} onEdit={onEdit} onDelete={onDelete} deleting={deleting} />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -464,12 +737,20 @@ export default function AdminCategories() {
   const toast = useToast()
 
   const [cats,     setCats]     = useState([])
+  const [sections, setSections] = useState([])
+  const [allFilters, setAllFilters] = useState([])
   const [loading,  setLoading]  = useState(true)
   const [deleting, setDeleting] = useState(null)
   const [saving,   setSaving]   = useState(false)
   const [search,   setSearch]   = useState('')
   const [modal,    setModal]    = useState(null)
-  // modal: null | 'create' | { type:'edit', cat } | { type:'addSub', parent }
+  // modal: null | 'create' | { type:'edit', cat } | { type:'addSub', parent, sectionId }
+  //        | { type:'addSection', cat } | { type:'editSection', section }
+
+  const loadSections = () =>
+    getAdminSections()
+      .then(r => setSections(r.data.data || []))
+      .catch(() => setSections([]))
 
   const load = () => {
     setLoading(true)
@@ -477,14 +758,18 @@ export default function AdminCategories() {
       .then(r => setCats(r.data.data || []))
       .catch(() => toast.error('Failed to load categories'))
       .finally(() => setLoading(false))
+    loadSections()
+    getAdminFilters()
+      .then(r => setAllFilters(r.data.data || []))
+      .catch(() => setAllFilters([]))
   }
 
   // Reload without spinner — used after create/update so the list always
   // reflects the real database state (avoids stale-state bugs from manual patching).
-  const reload = () =>
-    getAdminCategories()
-      .then(r => setCats(r.data.data || []))
-      .catch(() => {})
+  const reload = () => Promise.all([
+    getAdminCategories().then(r => setCats(r.data.data || [])).catch(() => {}),
+    loadSections(),
+  ])
 
   useEffect(load, [])
 
@@ -501,6 +786,18 @@ export default function AdminCategories() {
     })
     return map
   }, [cats])
+
+  // Sections grouped by their owning category, in display order.
+  const sectionsByCat = useMemo(() => {
+    const map = {}
+    ;[...sections].sort((a, b) => (a.sort_order - b.sort_order) || (a.id - b.id))
+      .forEach(s => {
+        const cid = Number(s.category_id)
+        if (!map[cid]) map[cid] = []
+        map[cid].push(s)
+      })
+    return map
+  }, [sections])
 
   // Search filter
   const q = search.toLowerCase()
@@ -520,10 +817,14 @@ export default function AdminCategories() {
     return all.filter(c => c.name.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q))
   }
 
-  const handleCreate = async (data) => {
+  const handleCreate = async ({ filter_ids, ...data }) => {
     setSaving(true)
     try {
-      await createAdminCategory(data)
+      const res   = await createAdminCategory(data)
+      const newId = res.data?.data?.id
+      if (newId && Array.isArray(filter_ids)) {
+        await saveCategoryFilters(newId, filter_ids)
+      }
       await reload()
       setModal(null)
       toast.success('Category created')
@@ -532,11 +833,14 @@ export default function AdminCategories() {
     } finally { setSaving(false) }
   }
 
-  const handleUpdate = async (data) => {
+  const handleUpdate = async ({ filter_ids, ...data }) => {
     const id = modal.cat.id
     setSaving(true)
     try {
       await updateAdminCategory(id, data)
+      if (Array.isArray(filter_ids)) {
+        await saveCategoryFilters(id, filter_ids)
+      }
       await reload()
       setModal(null)
       toast.success('Category updated')
@@ -557,10 +861,50 @@ export default function AdminCategories() {
     } finally { setDeleting(null) }
   }
 
+  // ── Section handlers ──────────────────────────────────────────────────────
+  const handleCreateSection = async (data) => {
+    const catId = modal.cat.id
+    setSaving(true)
+    try {
+      await createCategorySection(catId, data)
+      await reload()
+      setModal(null)
+      toast.success('Section created')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create section')
+    } finally { setSaving(false) }
+  }
+
+  const handleUpdateSection = async (data) => {
+    const id = modal.section.id
+    setSaving(true)
+    try {
+      await updateCategorySection(id, data)
+      await reload()
+      setModal(null)
+      toast.success('Section updated')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update section')
+    } finally { setSaving(false) }
+  }
+
+  const handleDeleteSection = async (section) => {
+    if (!confirm(`Delete section "${section.title}"? Its subcategories move back to the main block.`)) return
+    try {
+      await deleteCategorySection(section.id)
+      await reload()
+      toast.success('Section deleted')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Cannot delete this section')
+    }
+  }
+
   // Modal helpers
-  const openCreate  = ()      => setModal('create')
-  const openEdit    = (cat)   => setModal({ type: 'edit',   cat })
-  const openAddSub  = (parent)=> setModal({ type: 'addSub', parent })
+  const openCreate     = ()                 => setModal('create')
+  const openEdit       = (cat)              => setModal({ type: 'edit', cat })
+  const openAddSub     = (parent, sectionId = null) => setModal({ type: 'addSub', parent, sectionId })
+  const openAddSection = (cat)              => setModal({ type: 'addSection', cat })
+  const openEditSection= (section)          => setModal({ type: 'editSection', section })
 
   const modalTitle = modal === 'create'
     ? 'New Top-Level Category'
@@ -568,15 +912,20 @@ export default function AdminCategories() {
     ? `Edit — ${modal.cat.name}`
     : modal?.type === 'addSub'
     ? `Add Sub-category to "${modal.parent.name}"`
+    : modal?.type === 'addSection'
+    ? `Add Section to "${modal.cat.name}"`
+    : modal?.type === 'editSection'
+    ? `Edit Section — ${modal.section.title}`
     : ''
 
   const modalInitial = modal?.type === 'edit'
     ? modal.cat
     : modal?.type === 'addSub'
-    ? { parent_id: modal.parent.id }
+    ? { parent_id: modal.parent.id, section_id: modal.sectionId ?? '' }
     : null
 
   const onModalSave = modal?.type === 'edit' ? handleUpdate : handleCreate
+  const isSectionModal = modal?.type === 'addSection' || modal?.type === 'editSection'
 
   // Stats
   const totalTop  = topLevel.length
@@ -678,18 +1027,33 @@ export default function AdminCategories() {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredTopWithMatchingChildren.map((cat, idx) => (
-              <TopCatCard
-                key={cat.id}
-                cat={cat}
-                children={filteredChildrenOf(cat.id)}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-                onAddSub={openAddSub}
-                deleting={deleting}
-                colorIdx={topLevel.indexOf(cat)}
-              />
-            ))}
+            {filteredTopWithMatchingChildren.map((cat) => {
+              const visible    = filteredChildrenOf(cat.id)
+              const catSecs    = sectionsByCat[cat.id] || []
+              const secIdSet   = new Set(catSecs.map(s => String(s.id)))
+              const mainChildren = visible.filter(c => !c.section_id || !secIdSet.has(String(c.section_id)))
+              const childrenBySection = {}
+              catSecs.forEach(s => {
+                childrenBySection[s.id] = visible.filter(c => String(c.section_id) === String(s.id))
+              })
+              return (
+                <TopCatCard
+                  key={cat.id}
+                  cat={cat}
+                  mainChildren={mainChildren}
+                  sections={catSecs}
+                  childrenBySection={childrenBySection}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onAddSub={openAddSub}
+                  onAddSection={openAddSection}
+                  onEditSection={openEditSection}
+                  onDeleteSection={handleDeleteSection}
+                  deleting={deleting}
+                  colorIdx={topLevel.indexOf(cat)}
+                />
+              )
+            })}
 
             {/* Orphaned subcategories that match search but parent doesn't */}
             {search && (() => {
@@ -707,10 +1071,20 @@ export default function AdminCategories() {
         title={modalTitle}
         size="md"
       >
-        {!!modal && (
+        {!!modal && isSectionModal && (
+          <SectionForm
+            initial={modal.type === 'editSection' ? modal.section : null}
+            onSave={modal.type === 'editSection' ? handleUpdateSection : handleCreateSection}
+            onCancel={() => setModal(null)}
+            saving={saving}
+          />
+        )}
+        {!!modal && !isSectionModal && (
           <CategoryForm
             initial={modalInitial}
             topLevelCats={topLevel}
+            allFilters={allFilters}
+            sectionsByCat={sectionsByCat}
             onSave={onModalSave}
             onCancel={() => setModal(null)}
             saving={saving}

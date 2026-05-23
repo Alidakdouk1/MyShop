@@ -96,3 +96,18 @@ input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 .hero-display { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.03em; }
+
+/* Dynamic responsive product grid — driven by CSS custom properties set inline */
+.pg-grid {
+  grid-template-columns: repeat(var(--pg-mobile, 2), minmax(0, 1fr));
+}
+@media (min-width: 768px) {
+  .pg-grid {
+    grid-template-columns: repeat(var(--pg-mid, 3), minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .pg-grid {
+    grid-template-columns: repeat(var(--pg-cols, 4), minmax(0, 1fr));
+  }
+}

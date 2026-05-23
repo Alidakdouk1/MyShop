@@ -8,7 +8,18 @@ import { useToast } from '../../hooks/useToast'
 import Badge from '../ui/Badge'
 import StarRating from '../common/StarRating'
 
-export default function ProductCard({ product }) {
+const SHAPE_CLASS = {
+  rounded: 'rounded-2xl',
+  soft:    'rounded-lg',
+  sharp:   'rounded-none',
+}
+
+export default function ProductCard({ product, cardShape = 'rounded', cardSettings = {} }) {
+  const shapeClass   = SHAPE_CLASS[cardShape] || SHAPE_CLASS.rounded
+  const showRating   = cardSettings.show_rating   !== false
+  const showQuickAdd = cardSettings.show_quick_add !== false
+  const showBadges   = cardSettings.show_badges    !== false
+  const imageRatio   = cardSettings.image_ratio    || '3/4'
   const dispatch  = useDispatch()
   const toast     = useToast()
   const user      = useSelector(selectUser)
@@ -49,9 +60,9 @@ export default function ProductCard({ product }) {
 
   return (
     <Link to={`/products/${product.slug}`} className="group product-card block">
-      <div className="bg-surface rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+      <div className={`bg-surface ${shapeClass} overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}>
         {/* Image */}
-        <div className="relative overflow-hidden bg-surface-alt aspect-[3/4]">
+        <div className="relative overflow-hidden bg-surface-alt" style={{ aspectRatio: imageRatio }}>
           <img
             src={imgSrc}
             alt={product.name}
@@ -59,10 +70,12 @@ export default function ProductCard({ product }) {
             loading="lazy"
           />
           {/* Badges */}
-          <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-            {discount && <Badge variant="sale">-{discount}%</Badge>}
-            {product.is_new && <Badge variant="new">New</Badge>}
-          </div>
+          {showBadges && (
+            <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+              {discount && <Badge variant="sale">-{discount}%</Badge>}
+              {product.is_new && <Badge variant="new">New</Badge>}
+            </div>
+          )}
           {/* Wishlist */}
           <button
             onClick={handleWishlist}
@@ -79,7 +92,7 @@ export default function ProductCard({ product }) {
             </svg>
           </button>
           {/* Quick add — only for products without variants */}
-          {!hasVariants && (
+          {showQuickAdd && !hasVariants && (
             <div className="absolute bottom-0 inset-x-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
               <button
                 onClick={handleAddToCart}
@@ -98,7 +111,7 @@ export default function ProductCard({ product }) {
           <h3 className="text-sm font-semibold text-ink line-clamp-2 leading-snug mb-2">
             {product.name}
           </h3>
-          {(product.rating_avg || product.avg_rating) > 0 && (
+          {showRating && (product.rating_avg || product.avg_rating) > 0 && (
             <div className="mb-2">
               <StarRating value={product.rating_avg || product.avg_rating} count={product.review_count} />
             </div>
