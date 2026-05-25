@@ -486,7 +486,17 @@ function CartDrawer() {
   return (
     <div className="fixed inset-0 z-[90] flex justify-end">
       <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-fade-in" onClick={() => dispatch(toggleCart())} />
-      <div className="relative bg-surface w-full max-w-md h-full flex flex-col shadow-2xl animate-drawer-in">
+      <div
+        className="relative bg-surface w-full max-w-md h-full flex flex-col shadow-2xl animate-drawer-in"
+        style={{
+          transform: dragX ? `translateX(${dragX}px)` : undefined,
+          transition: dragX ? 'none' : 'transform 0.25s var(--ease-out-soft)',
+          touchAction: 'pan-y',
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-lg font-bold text-ink">
             Shopping Cart {cartItems.length > 0 && <span className="text-ink-tertiary font-normal text-sm">({cartItems.length})</span>}
