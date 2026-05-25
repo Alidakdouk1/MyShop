@@ -510,12 +510,12 @@ function CartDrawer() {
                         onClick={() => item.quantity > 1
                           ? dispatch(updateCartItemThunk({ id: item.id, quantity: item.quantity - 1 }))
                           : dispatch(removeCartItemThunk(item.id))}
-                        className="w-8 h-8 flex items-center justify-center hover:bg-surface-alt transition-colors text-ink"
+                        className="w-9 h-9 flex items-center justify-center hover:bg-surface-alt transition-colors text-ink"
                       >–</button>
                       <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
                       <button
                         onClick={() => dispatch(updateCartItemThunk({ id: item.id, quantity: item.quantity + 1 }))}
-                        className="w-8 h-8 flex items-center justify-center hover:bg-surface-alt transition-colors text-ink"
+                        className="w-9 h-9 flex items-center justify-center hover:bg-surface-alt transition-colors text-ink"
                       >+</button>
                     </div>
                     <button
@@ -534,7 +534,7 @@ function CartDrawer() {
         </div>
 
         {cartItems.length > 0 && (
-          <div className="px-6 py-5 border-t border-border space-y-3">
+          <div className="px-6 py-5 border-t border-border space-y-3 pb-safe">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-ink">Subtotal</span>
               <span className="text-xl font-bold text-ink">${total.toFixed(2)}</span>
