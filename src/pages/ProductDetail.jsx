@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { getProduct, getProductReviews, createReview } from '../api/productApi'
+import { getProduct, getProductReviews, createReview, notifyBackInStock } from '../api/productApi'
 import { getProductFilters } from '../api/filterApi'
 import { addToCartThunk } from '../store/slices/cartSlice'
 import { toggleWishlistThunk, selectIsWishlisted, selectWishlistItemId } from '../store/slices/wishlistSlice'
@@ -10,6 +10,8 @@ import { useToast } from '../hooks/useToast'
 import StarRating from '../components/common/StarRating'
 import Spinner from '../components/ui/Spinner'
 import ProductCard from '../components/product/ProductCard'
+import Seo from '../components/common/Seo'
+import { getRecentlyViewed, addRecentlyViewed } from '../lib/recentlyViewed'
 
 function FilterOptionPill({ label, active, soldOut, tooltip, onClick }) {
   const [hover, setHover] = useState(false)
@@ -89,8 +91,12 @@ export default function ProductDetail() {
   const [selectedVariant, setSelectedVariant] = useState(null)
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [notifyEmail, setNotifyEmail] = useState('')
+  const [notifySent, setNotifySent]   = useState(false)
   const [tab, setTab]             = useState('description')
   const [related, setRelated]     = useState([])
+  const [recentlyViewed, setRecentlyViewed] = useState([])
+  const [zoom, setZoom]           = useState({ on: false, x: 50, y: 50 })
   const [imgLoaded, setImgLoaded] = useState(false)
   const [productFilters, setProductFilters] = useState([])
   const [pickedFilters, setPickedFilters]   = useState({}) // { [filter_id]: optionId }
@@ -105,11 +111,14 @@ export default function ProductDetail() {
     setImgLoaded(false)
     setProductFilters([])
     setPickedFilters({})
+    // Show items viewed *before* this one, then record the current product.
+    setRecentlyViewed(getRecentlyViewed().filter(rp => rp.slug !== slug).slice(0, 6))
     getProduct(slug).then(r => {
       const p = r.data.data
       setProduct(p)
       setActiveImg(0)
       setQty(1)
+      setZoom({ on: false, x: 50, y: 50 })
       setSelectedVariant((p.variants && p.variants.length > 0) ? p.variants[0] : null)
       if (p?.id) {
         getProductReviews(p.id).then(r2 => setReviews(r2.data.data || []))
@@ -118,6 +127,7 @@ export default function ProductDetail() {
           .catch(() => setProductFilters([]))
       }
       setRelated(Array.isArray(p.related) ? p.related : [])
+      addRecentlyViewed(p)
     }).catch(() => navigate('/not-found', { replace: true }))
       .finally(() => setLoading(false))
   }, [slug])
@@ -218,6 +228,18 @@ export default function ProductDetail() {
     await dispatch(toggleWishlistThunk({ productId: product.id, wishlistItemId: isWished ? wItemId : null }))
   }
 
+  const handleNotify = async (e) => {
+    e.preventDefault()
+    if (!notifyEmail.trim()) return
+    try {
+      const { data } = await notifyBackInStock(product.id, notifyEmail.trim())
+      toast.success(data?.message || "We'll let you know!")
+      setNotifySent(true)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not subscribe')
+    }
+  }
+
   const handleReview = async (e) => {
     e.preventDefault()
     if (!user) { toast.info('Login to write a review'); return }
@@ -233,8 +255,40 @@ export default function ProductDetail() {
     } finally { setSubmitting(false) }
   }
 
+  const absImg = (src) => !src ? undefined : (src.startsWith('http') ? src : `${window.location.origin}/MyShop/backend/${src}`)
+
   return (
     <div style={{ background: '#FAFAF8' }}>
+      <Seo
+        title={product.name}
+        description={(product.description || '').trim().slice(0, 160) || `Buy ${product.name} at MyShop.`}
+        image={absImg(images[0])}
+        type="product"
+        canonical={`${window.location.origin}/products/${product.slug}`}
+        jsonLd={{
+          '@context': 'https://schema.org/',
+          '@type': 'Product',
+          name: product.name,
+          image: images.map(absImg).filter(Boolean),
+          description: product.description || undefined,
+          sku: product.sku || undefined,
+          category: product.category_name || undefined,
+          offers: {
+            '@type': 'Offer',
+            priceCurrency: 'USD',
+            price: Number(effectivePrice).toFixed(2),
+            availability: stockQty > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            url: `${window.location.origin}/products/${product.slug}`,
+          },
+          ...(avgRating > 0 ? {
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: Number(avgRating).toFixed(1),
+              reviewCount: reviews.length || 1,
+            },
+          } : {}),
+        }}
+      />
 
       {/* ── Breadcrumb ────────────────────────────────────── */}
       <div className="max-w-screen-xl mx-auto px-5 md:px-10 pt-7 pb-2">
@@ -259,14 +313,26 @@ export default function ProductDetail() {
 
           {/* ── Image Gallery (sticky) ─────────────────── */}
           <div className="lg:sticky lg:top-8">
-            {/* Main image */}
+            {/* Main image — hover to zoom (follows the cursor) */}
             <div
+              onMouseEnter={() => { if (images[activeImg]) setZoom(z => ({ ...z, on: true })) }}
+              onMouseLeave={() => setZoom({ on: false, x: 50, y: 50 })}
+              onMouseMove={(e) => {
+                if (!images[activeImg]) return
+                const r = e.currentTarget.getBoundingClientRect()
+                setZoom(z => ({
+                  ...z,
+                  x: ((e.clientX - r.left) / r.width) * 100,
+                  y: ((e.clientY - r.top) / r.height) * 100,
+                }))
+              }}
               style={{
                 background: '#EEECE6',
                 borderRadius: '20px',
                 overflow: 'hidden',
                 aspectRatio: '1 / 1',
                 position: 'relative',
+                cursor: images[activeImg] ? 'zoom-in' : 'default',
               }}
             >
               <img
@@ -279,7 +345,10 @@ export default function ProductDetail() {
                   height: '100%',
                   objectFit: 'cover',
                   opacity: imgLoaded ? 1 : 0,
-                  transition: 'opacity 0.4s ease',
+                  transform: zoom.on ? 'scale(2)' : 'scale(1)',
+                  transformOrigin: `${zoom.x}% ${zoom.y}%`,
+                  transition: zoom.on ? 'opacity 0.4s ease' : 'opacity 0.4s ease, transform 0.25s ease',
+                  willChange: 'transform',
                 }}
               />
               {/* Discount badge overlay */}
@@ -677,6 +746,35 @@ export default function ProductDetail() {
               </button>
             </div>
 
+            {/* Back-in-stock notify (only when out of stock) */}
+            {stockQty === 0 && (
+              <div style={{ marginBottom: '24px', padding: '16px', background: '#F2F0EB', borderRadius: '14px' }}>
+                {notifySent ? (
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#16A34A', margin: 0 }}>
+                    ✓ We’ll email you the moment this is back in stock.
+                  </p>
+                ) : (
+                  <>
+                    <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5C5854', marginBottom: '10px' }}>
+                      Out of stock — get notified
+                    </p>
+                    <form onSubmit={handleNotify} style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="email" required
+                        value={notifyEmail}
+                        onChange={e => setNotifyEmail(e.target.value)}
+                        placeholder="your@email.com"
+                        style={{ flex: 1, border: '1.5px solid #E4E1D9', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', outline: 'none', background: '#fff', color: '#0F0F0F' }}
+                      />
+                      <button type="submit" style={{ background: '#0F0F0F', color: '#fff', border: 'none', borderRadius: '10px', padding: '0 20px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Notify Me
+                      </button>
+                    </form>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Thin rule */}
             <div style={{ height: '1px', background: '#E4E1D9', marginBottom: '24px' }} />
 
@@ -906,6 +1004,42 @@ export default function ProductDetail() {
           }}>
             {related.map((p, i) => (
               <div key={p.id} style={{ animation: `fadeIn 0.4s ease both`, animationDelay: `${Math.min(i * 0.06, 0.4)}s` }}>
+                <ProductCard product={p} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Recently Viewed ───────────────────────────────── */}
+      {recentlyViewed.length > 0 && (
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 20px 80px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '32px', borderTop: '1px solid #E4E1D9', paddingTop: '48px' }}>
+            <div>
+              <p style={{
+                fontSize: '10px', fontWeight: 600,
+                letterSpacing: '0.25em', textTransform: 'uppercase',
+                color: '#9C9894', marginBottom: '6px',
+              }}>
+                Keep Exploring
+              </p>
+              <h2 style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: 'clamp(1.8rem, 3vw, 2.8rem)',
+                fontWeight: 400, letterSpacing: '0.03em',
+                color: '#0F0F0F', margin: 0, lineHeight: 1,
+              }}>
+                Recently Viewed
+              </h2>
+            </div>
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gap: '16px',
+          }}>
+            {recentlyViewed.map((p, i) => (
+              <div key={p.id} style={{ animation: 'fadeIn 0.4s ease both', animationDelay: `${Math.min(i * 0.06, 0.4)}s` }}>
                 <ProductCard product={p} />
               </div>
             ))}

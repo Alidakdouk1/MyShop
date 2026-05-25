@@ -9,13 +9,13 @@ class OrderModel extends BaseModel
     {
         $this->query(
             "INSERT INTO orders (user_id, address_id, coupon_id, subtotal, shipping_fee,
-             discount, total, payment_method, payment_status, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             discount, tax, total, payment_method, payment_status, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $data['user_id'], $data['address_id'] ?? null, $data['coupon_id'] ?? null,
                 $data['subtotal'], $data['shipping_fee'] ?? 0, $data['discount'] ?? 0,
-                $data['total'], $data['payment_method'] ?? 'cod',
-                $data['payment_method'] === 'cod' ? 'pending' : 'pending',
+                $data['tax'] ?? 0, $data['total'], $data['payment_method'] ?? 'cod',
+                'pending',
                 $data['notes'] ?? null,
             ]
         );

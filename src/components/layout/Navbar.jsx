@@ -8,6 +8,7 @@ import { toggleCart, toggleMobileMenu, setMobileMenu, selectMobileMenuOpen } fro
 import { removeCartItemThunk, updateCartItemThunk } from '../../store/slices/cartSlice'
 import { useAuth } from '../../hooks/useAuth'
 import { getHomepageSettings } from '../../api/adminApi'
+import { getProducts } from '../../api/productApi'
 
 const DEFAULT_ANNOUNCE = [
   { icon: '🚚', text: 'Free Shipping',  show_icon: true },
@@ -22,6 +23,45 @@ const DEFAULT_BAR_STYLE = {
   separator:  '|',
 }
 let _announceCache = null  // { items, style }
+
+// Premium line-icons for the announcement bar. Resolved from the item TEXT so
+// they look right for the defaults and for any admin-configured items, falling
+// back to the stored emoji (or a check) when no keyword matches.
+function AnnounceSvg({ children }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={{ width: '1.15em', height: '1.15em' }} className="shrink-0">
+      {children}
+    </svg>
+  )
+}
+
+const ANNOUNCE_ICONS = {
+  shipping: <AnnounceSvg><rect x="1.75" y="6.75" width="11.5" height="8.5" rx="1" /><path d="M13.25 9.25h3.6a1 1 0 0 1 .78.38l2.05 2.55a1 1 0 0 1 .22.62v2.45h-6.65" /><circle cx="6" cy="17.4" r="1.6" /><circle cx="16.75" cy="17.4" r="1.6" /></AnnounceSvg>,
+  returns:  <AnnounceSvg><path d="M9 15 3 9l6-6" /><path d="M3 9h12a6 6 0 0 1 0 12h-3" /></AnnounceSvg>,
+  fees:     <AnnounceSvg><path d="M3.6 3.6h6.2a1.5 1.5 0 0 1 1.06.44l8.4 8.4a1.5 1.5 0 0 1 0 2.12l-4.7 4.7a1.5 1.5 0 0 1-2.12 0l-8.4-8.4A1.5 1.5 0 0 1 3.6 9.8z" /><circle cx="7.4" cy="7.4" r="1.05" /></AnnounceSvg>,
+  secure:   <AnnounceSvg><path d="M12 3.2 19 6v5c0 4.2-2.9 7.6-7 8.8C7.9 18.6 5 15.2 5 11V6z" /><path d="M9 11.6l2 2 4-4" /></AnnounceSvg>,
+  support:  <AnnounceSvg><path d="M4 5.5h16a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z" /></AnnounceSvg>,
+  check:    <AnnounceSvg><circle cx="12" cy="12" r="9" /><path d="M8.5 12.4l2.5 2.5 4.6-5" /></AnnounceSvg>,
+}
+
+function announceIconType(text = '') {
+  const t = text.toLowerCase()
+  if (/ship|deliver/.test(t))                                return 'shipping'
+  if (/return|refund|exchang/.test(t))                       return 'returns'
+  if (/fee|hidden|price|tax|cost/.test(t))                   return 'fees'
+  if (/secur|safe|encrypt|protect|guarant|warrant/.test(t))  return 'secure'
+  if (/support|help|service|customer|24\/7/.test(t))         return 'support'
+  return null
+}
+
+function AnnounceIcon({ item }) {
+  const type = announceIconType(item.text)
+  if (type) return ANNOUNCE_ICONS[type]
+  if (item.icon) return <span className="shrink-0">{item.icon}</span>
+  return ANNOUNCE_ICONS.check
+}
 
 function AnnouncementBar() {
   const [items,    setItems]    = useState(_announceCache?.items    || DEFAULT_ANNOUNCE)
@@ -44,35 +84,54 @@ function AnnouncementBar() {
   }, [])
 
   const fsMap = { xs: '0.75rem', sm: '0.875rem', base: '1rem' }
-  const fontSize = fsMap[barStyle.font_size || 'xs'] || '0.75rem'
+  const fontSize  = fsMap[barStyle.font_size || 'xs'] || '0.75rem'
+  const textColor = barStyle.text_color || '#ffffff'
+  const separator = barStyle.separator || '•'
+
+  if (!items.length) return null
+
+  // Repeat the items so the strip always fills the bar and reads as a dense
+  // ticker; the duration scales with cell count to keep a constant, calm speed.
+  const repeat      = Math.max(2, Math.ceil(10 / items.length))
+  const durationSec = Math.max(24, items.length * repeat * 3.4)
+
+  const group = (clone) => (
+    <div
+      className="marquee__group"
+      aria-hidden={clone || undefined}
+      style={{ animationDuration: `${durationSec}s` }}
+    >
+      {Array.from({ length: repeat }).map((_, r) =>
+        items.map((item, i) => (
+          <span key={`${r}-${i}`} className="inline-flex items-center whitespace-nowrap">
+            <span className="mx-7 leading-none select-none" style={{ color: `${textColor}55` }}>
+              {separator}
+            </span>
+            <span className="inline-flex items-center gap-2 font-medium tracking-wide">
+              {item.show_icon !== false && <AnnounceIcon item={item} />}
+              <span>{item.text}</span>
+            </span>
+          </span>
+        ))
+      )}
+    </div>
+  )
 
   return (
     <div
-      className="hidden md:flex items-center justify-center flex-wrap"
+      className="hidden md:block overflow-hidden"
       style={{
-        background:    barStyle.bg_color  || '#0F0F0F',
-        color:         barStyle.text_color || '#ffffff',
+        background:    barStyle.bg_color || '#0F0F0F',
+        color:         textColor,
         paddingTop:    `${barStyle.padding_y ?? 10}px`,
         paddingBottom: `${barStyle.padding_y ?? 10}px`,
         fontSize,
       }}
     >
-      {items.map((item, i) => (
-        <span key={i} className="flex items-center">
-          {i > 0 && (
-            <span
-              className="mx-8"
-              style={{ color: `${barStyle.text_color || '#ffffff'}40`, fontSize: '0.875rem' }}
-            >
-              {barStyle.separator || '|'}
-            </span>
-          )}
-          <span className="flex items-center gap-1.5 font-medium tracking-wide">
-            {item.show_icon !== false && item.icon && <span>{item.icon}</span>}
-            <span>{item.text}</span>
-          </span>
-        </span>
-      ))}
+      <div className="marquee">
+        {group(false)}
+        {group(true)}
+      </div>
     </div>
   )
 }
@@ -95,7 +154,10 @@ export default function Navbar({ headerRef, hidden = false }) {
   const [search, setSearch]         = useState('')
   const [userMenuOpen, setUserMenu] = useState(false)
   const [scrolled, setScrolled]     = useState(false)
+  const [results, setResults]       = useState([])
+  const [showResults, setShowResults] = useState(false)
   const userMenuRef = useRef(null)
+  const searchRef   = useRef(null)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -111,10 +173,31 @@ export default function Navbar({ headerRef, hidden = false }) {
 
   useEffect(() => { dispatch(setMobileMenu(false)) }, [location.pathname])
 
+  // Search autocomplete — debounced product suggestions (state set only inside
+  // the async callback; the render is gated on query length so nothing stale shows)
+  useEffect(() => {
+    const q = search.trim()
+    if (q.length < 2) return
+    const t = setTimeout(() => {
+      getProducts({ search: q, limit: 6 })
+        .then(r => { setResults(r.data.data || []); setShowResults(true) })
+        .catch(() => { /* keep previous suggestions on error */ })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    const onClick = (e) => { if (!searchRef.current?.contains(e.target)) setShowResults(false) }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
   const handleSearch = (e) => {
     e.preventDefault()
-    if (search.trim()) { navigate(`/shop?search=${encodeURIComponent(search.trim())}`); setSearch('') }
+    if (search.trim()) { navigate(`/shop?search=${encodeURIComponent(search.trim())}`); setSearch(''); setShowResults(false) }
   }
+
+  const openResult = (slug) => { navigate(`/products/${slug}`); setSearch(''); setShowResults(false); setResults([]) }
 
   return (
     <>
@@ -164,12 +247,13 @@ export default function Navbar({ headerRef, hidden = false }) {
             </nav>
 
             {/* Search */}
-            <form onSubmit={handleSearch} className="flex-1 max-w-md mx-auto hidden sm:flex">
+            <form ref={searchRef} onSubmit={handleSearch} className="flex-1 max-w-md mx-auto hidden sm:block relative">
               <div className="relative w-full">
                 <input
                   type="search"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
+                  onFocus={() => { if (results.length) setShowResults(true) }}
                   placeholder="Search products…"
                   className="w-full bg-surface-alt border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm
                     text-ink placeholder-ink-tertiary outline-none
@@ -181,6 +265,35 @@ export default function Navbar({ headerRef, hidden = false }) {
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
+
+              {/* Autocomplete suggestions */}
+              {showResults && search.trim().length >= 2 && results.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-2 bg-surface border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-slide-down">
+                  {results.map(p => {
+                    const raw   = p.primary_image || p.main_image
+                    const img   = raw ? (raw.startsWith('http') ? raw : `/MyShop/backend/${raw}`) : 'https://placehold.co/80x80/F2F0EB/9C9894?text=P'
+                    const price = p.sale_price || p.base_price || p.price || 0
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => openResult(p.slug)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-surface-alt transition-colors text-left"
+                      >
+                        <img src={img} alt="" className="w-10 h-10 rounded-lg object-cover bg-surface-alt shrink-0" />
+                        <span className="flex-1 min-w-0 text-sm font-medium text-ink line-clamp-1">{p.name}</span>
+                        <span className="text-sm font-bold text-ink shrink-0">${Number(price).toFixed(2)}</span>
+                      </button>
+                    )
+                  })}
+                  <button
+                    type="submit"
+                    className="w-full text-center text-xs font-bold text-accent py-2.5 border-t border-border hover:bg-surface-alt transition-colors"
+                  >
+                    See all results for “{search.trim()}”
+                  </button>
+                </div>
+              )}
             </form>
 
             {/* Actions */}

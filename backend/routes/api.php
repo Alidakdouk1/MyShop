@@ -76,6 +76,9 @@ if (match_route('/api/products/{id}/images', $path, $params)) {
 if (match_route('/api/products/{id}/reviews', $path, $params)) {
     if ($method === 'GET') (new ReviewController())->forProduct((int) $params['id']);
 }
+if (match_route('/api/products/{id}/notify-me', $path, $params)) {
+    if ($method === 'POST') (new StockNotificationController())->subscribe((int) $params['id']);
+}
 if (match_route('/api/products/{id}/filters', $path, $params)) {
     if ($method === 'GET')                          (new FilterController())->showForProduct((int) $params['id']);
     if ($method === 'POST' || $method === 'PUT')    (new FilterController())->saveForProduct((int) $params['id']);
@@ -127,6 +130,18 @@ if (match_route('/api/orders/{id}', $path, $params)) {
 }
 if (match_route('/api/orders/{id}/cancel', $path, $params)) {
     if ($method === 'PUT') (new OrderController())->cancel((int) $params['id']);
+}
+
+// ── Returns / RMA ─────────────────────────────────────────────
+if (match_route('/api/returns', $path, $params)) {
+    if ($method === 'POST') (new ReturnController())->store();
+    if ($method === 'GET')  (new ReturnController())->index();
+}
+if (match_route('/api/admin/returns', $path, $params)) {
+    if ($method === 'GET') (new ReturnController())->adminIndex();
+}
+if (match_route('/api/admin/returns/{id}', $path, $params)) {
+    if ($method === 'PUT') (new ReturnController())->adminUpdate((int) $params['id']);
 }
 
 // ── Users ────────────────────────────────────────────────────
@@ -183,9 +198,25 @@ if (match_route('/api/admin/coupons', $path, $params)) {
     if ($method === 'POST') (new CouponController())->adminStore();
 }
 
+// ── Sitemap (public XML) ──────────────────────────────────────
+if (match_route('/sitemap.xml', $path, $params)) {
+    (new SitemapController())->index();
+}
+
+// ── Newsletter ────────────────────────────────────────────────
+if (match_route('/api/newsletter/subscribe', $path, $params)) {
+    if ($method === 'POST') (new NewsletterController())->subscribe();
+}
+if (match_route('/api/admin/newsletter', $path, $params)) {
+    if ($method === 'GET') (new NewsletterController())->adminIndex();
+}
+
 // ── Admin — Dashboard ─────────────────────────────────────────
 if (match_route('/api/admin/dashboard', $path, $params)) {
     (new AdminController())->dashboard();
+}
+if (match_route('/api/admin/abandoned-carts', $path, $params)) {
+    if ($method === 'GET') (new AdminController())->abandonedCarts();
 }
 
 // ── Admin — Users ─────────────────────────────────────────────
@@ -249,6 +280,13 @@ if (match_route('/api/admin/orders/{id}/status', $path, $params)) {
 if (match_route('/api/admin/products', $path, $params)) {
     if ($method === 'GET')  (new AdminController())->products();
     if ($method === 'POST') (new AdminController())->createProduct();
+}
+// CSV import/export — must precede the generic {id} route below
+if (match_route('/api/admin/products/export', $path, $params)) {
+    if ($method === 'GET') (new AdminController())->exportProductsCsv();
+}
+if (match_route('/api/admin/products/import', $path, $params)) {
+    if ($method === 'POST') (new AdminController())->importProductsCsv();
 }
 if (match_route('/api/admin/products/{id}/images', $path, $params)) {
     if ($method === 'POST') (new AdminController())->uploadProductImage((int) $params['id']);

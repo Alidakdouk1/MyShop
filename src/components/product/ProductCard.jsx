@@ -7,6 +7,7 @@ import { selectUser } from '../../store/slices/authSlice'
 import { useToast } from '../../hooks/useToast'
 import Badge from '../ui/Badge'
 import StarRating from '../common/StarRating'
+import QuickView from './QuickView'
 
 const SHAPE_CLASS = {
   rounded: 'rounded-2xl',
@@ -26,6 +27,7 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
   const isWished  = useSelector(selectIsWishlisted(product.id))
   const wItemId   = useSelector(selectWishlistItemId(product.id))
   const [adding, setAdding] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
 
   // API returns base_price + optional sale_price; effective price is sale_price ?? base_price
   const effectivePrice = product.sale_price || product.base_price || product.price || 0
@@ -59,6 +61,7 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
   }
 
   return (
+    <>
     <Link to={`/products/${product.slug}`} className="group product-card block">
       <div className={`bg-surface ${shapeClass} overflow-hidden ring-1 ring-border/60 shadow-soft hover:shadow-float hover:ring-ink/10 transition-all duration-500 ease-(--ease-out-soft) hover:-translate-y-1.5`}>
         {/* Image */}
@@ -92,6 +95,20 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
             <svg className="w-4.5 h-4.5" fill={isWished ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+          </button>
+          {/* Quick view — hover-revealed below the wishlist button */}
+          <button
+            onClick={(e) => { e.preventDefault(); setQuickOpen(true) }}
+            aria-label="Quick view"
+            className="absolute top-14 right-3 w-9 h-9 rounded-full flex items-center justify-center
+              bg-white/70 backdrop-blur-md text-ink-tertiary shadow-md
+              opacity-0 group-hover:opacity-100 hover:text-ink hover:bg-white hover:scale-110
+              transition-all duration-300 ease-(--ease-out-back) active:scale-90"
+          >
+            <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
           {/* Quick add — only for products without variants */}
@@ -130,5 +147,7 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
         </div>
       </div>
     </Link>
+    <QuickView slug={product.slug} open={quickOpen} onClose={() => setQuickOpen(false)} />
+    </>
   )
 }

@@ -1,44 +1,55 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { getMeThunk, selectUser } from './store/slices/authSlice'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect, lazy, Suspense } from 'react'
+import { useDispatch } from 'react-redux'
+import { getMeThunk } from './store/slices/authSlice'
 import { fetchCart }  from './store/slices/cartSlice'
 import { fetchWishlist } from './store/slices/wishlistSlice'
 
 import Layout from './components/layout/Layout'
 import AdminLayout from './components/layout/AdminLayout'
 import ProtectedRoute from './components/common/ProtectedRoute'
+import Spinner from './components/ui/Spinner'
 
 // Block guests from auth-only pages; admins can browse freely
 function CustomerRoute({ children }) {
   return children
 }
 
-import Home          from './pages/Home'
-import Shop          from './pages/Shop'
-import ProductDetail from './pages/ProductDetail'
-import Cart          from './pages/Cart'
-import Checkout      from './pages/Checkout'
-import NotFound      from './pages/NotFound'
+// Route-level code-splitting — each page ships as its own chunk, loaded on demand.
+const Home          = lazy(() => import('./pages/Home'))
+const Shop          = lazy(() => import('./pages/Shop'))
+const ProductDetail = lazy(() => import('./pages/ProductDetail'))
+const Cart          = lazy(() => import('./pages/Cart'))
+const Checkout      = lazy(() => import('./pages/Checkout'))
+const NotFound      = lazy(() => import('./pages/NotFound'))
 
-import Login    from './pages/auth/Login'
-import Register from './pages/auth/Register'
+const Login    = lazy(() => import('./pages/auth/Login'))
+const Register = lazy(() => import('./pages/auth/Register'))
 
-import Profile     from './pages/user/Profile'
-import Orders      from './pages/user/Orders'
-import OrderDetail from './pages/user/OrderDetail'
-import Wishlist    from './pages/user/Wishlist'
+const Profile     = lazy(() => import('./pages/user/Profile'))
+const Orders      = lazy(() => import('./pages/user/Orders'))
+const OrderDetail = lazy(() => import('./pages/user/OrderDetail'))
+const Wishlist    = lazy(() => import('./pages/user/Wishlist'))
 
-import AdminCategories     from './pages/admin/AdminCategories'
-import AdminDashboard      from './pages/admin/AdminDashboard'
-import AdminUsers          from './pages/admin/AdminUsers'
-import AdminOrders         from './pages/admin/AdminOrders'
-import AdminProducts       from './pages/admin/AdminProducts'
-import AdminAdmins         from './pages/admin/AdminAdmins'
-import AdminAddEditProduct from './pages/admin/AddEditProduct'
-import AdminHomepage       from './pages/admin/AdminHomepage'
-import AdminShopPage       from './pages/admin/AdminShopPage'
-import AdminFilters        from './pages/admin/AdminFilters'
+const AdminCategories     = lazy(() => import('./pages/admin/AdminCategories'))
+const AdminDashboard      = lazy(() => import('./pages/admin/AdminDashboard'))
+const AdminUsers          = lazy(() => import('./pages/admin/AdminUsers'))
+const AdminOrders         = lazy(() => import('./pages/admin/AdminOrders'))
+const AdminProducts       = lazy(() => import('./pages/admin/AdminProducts'))
+const AdminAdmins         = lazy(() => import('./pages/admin/AdminAdmins'))
+const AdminAddEditProduct = lazy(() => import('./pages/admin/AddEditProduct'))
+const AdminHomepage       = lazy(() => import('./pages/admin/AdminHomepage'))
+const AdminShopPage       = lazy(() => import('./pages/admin/AdminShopPage'))
+const AdminFilters        = lazy(() => import('./pages/admin/AdminFilters'))
+const AdminReturns        = lazy(() => import('./pages/admin/AdminReturns'))
+
+function PageFallback() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <Spinner size="xl" className="text-ink-tertiary" />
+    </div>
+  )
+}
 
 function AppInit() {
   const dispatch = useDispatch()
@@ -61,6 +72,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppInit />
+      <Suspense fallback={<PageFallback />}>
       <Routes>
         {/* Customer-only — admins are redirected to /admin */}
         <Route path="/"               element={<Layout><Home /></Layout>} />
@@ -89,9 +101,11 @@ export default function App() {
         <Route path="/admin/products/:id/edit" element={<ProtectedRoute role="admin"><AdminLayout><AdminAddEditProduct /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/homepage"          element={<ProtectedRoute role="admin"><AdminLayout><AdminHomepage /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/shop"             element={<ProtectedRoute role="admin"><AdminLayout><AdminShopPage /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/returns"          element={<ProtectedRoute role="admin"><AdminLayout><AdminReturns /></AdminLayout></ProtectedRoute>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

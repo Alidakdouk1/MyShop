@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { selectCartItems, selectCartTotal, clearCartThunk } from '../store/slices/cartSlice'
 import { checkout, validateCoupon } from '../api/orderApi'
+import { computeTotals } from '../lib/storeConfig'
 import { useToast } from '../hooks/useToast'
 import Input from '../components/ui/Input'
 import Button from '../components/ui/Button'
@@ -46,9 +47,11 @@ export default function Checkout() {
     try {
       const { data } = await validateCoupon(coupon)
       const d = data.data
-      if (d.type === 'percent') setDiscount(subtotal * d.value / 100)
-      else setDiscount(Math.min(d.value, subtotal))
-      toast.success(`Coupon applied! You save $${discount.toFixed(2)}`)
+      const saved = d.type === 'percent'
+        ? subtotal * d.value / 100
+        : Math.min(d.value, subtotal)
+      setDiscount(saved)
+      toast.success(`Coupon applied! You save $${saved.toFixed(2)}`)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid coupon')
     } finally { setCouponLoading(false) }
@@ -71,7 +74,7 @@ export default function Checkout() {
     } finally { setLoading(false) }
   }
 
-  const total = subtotal - discount
+  const { shipping, tax, total, freeShippingRemaining } = computeTotals(subtotal, discount)
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-10">
@@ -207,10 +210,18 @@ export default function Checkout() {
               <Button variant="secondary" size="sm" onClick={applyCoupon} loading={couponLoading}>Apply</Button>
             </div>
 
+            {/* Free-shipping progress nudge */}
+            {freeShippingRemaining > 0 && (
+              <div className="text-xs text-ink-secondary bg-surface-alt rounded-xl px-3 py-2.5">
+                Add <span className="font-bold text-ink">${freeShippingRemaining.toFixed(2)}</span> more to unlock <span className="font-semibold text-ink">free shipping</span>.
+              </div>
+            )}
+
             <div className="border-t border-border pt-3 space-y-2">
               <Row label="Subtotal"     value={`$${subtotal.toFixed(2)}`} />
               {discount > 0 && <Row label="Discount" value={`-$${discount.toFixed(2)}`} accent />}
-              <Row label="Shipping"     value="Free" />
+              <Row label="Shipping"     value={shipping === 0 ? 'Free' : `$${shipping.toFixed(2)}`} />
+              {tax > 0 && <Row label="Tax" value={`$${tax.toFixed(2)}`} />}
               <Row label="Total"        value={`$${total.toFixed(2)}`} bold />
             </div>
           </div>

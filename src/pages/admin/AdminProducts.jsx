@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getAdminProducts, adminDeleteProduct } from '../../api/adminApi'
+import { getAdminProducts, adminDeleteProduct, exportProductsCsv, importProductsCsv } from '../../api/adminApi'
 import { getCategoriesFlat } from '../../api/productApi'
 import { useToast } from '../../hooks/useToast'
 import Spinner from '../../components/ui/Spinner'
@@ -25,6 +25,8 @@ export default function AdminProducts() {
   const [subId,       setSubId]       = useState('')   // selected subcategory
   const [deleting,    setDeleting]    = useState(null)
   const [view,        setView]        = useState('table') // 'table' | 'grid'
+  const [importing,   setImporting]   = useState(false)
+  const fileRef = useRef(null)
 
   useEffect(() => {
     getCategoriesFlat()
@@ -49,6 +51,38 @@ export default function AdminProducts() {
   useEffect(() => { load() }, [page])
 
   const handleSearch = e => { e.preventDefault(); setPage(1); load(1, search, subId || parentId) }
+
+  const handleExport = async () => {
+    try {
+      const res = await exportProductsCsv()
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Export failed')
+    }
+  }
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const { data } = await importProductsCsv(fd)
+      const d = data.data || {}
+      toast.success(`Imported: ${d.created || 0} new, ${d.updated || 0} updated${d.errors?.length ? `, ${d.errors.length} skipped` : ''}`)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Import failed')
+    } finally {
+      setImporting(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   const selectParent = (pid) => {
     setParentId(pid)
@@ -83,16 +117,36 @@ export default function AdminProducts() {
             PRODUCTS
           </h1>
         </div>
-        <button
-          onClick={() => navigate('/admin/products/new')}
-          className="flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl text-white transition-all hover:opacity-90"
-          style={{ background: '#0F0F0F' }}
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-          </svg>
-          Add Product
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-all hover:bg-surface-alt"
+            style={{ background: '#fff', color: '#0F0F0F', border: '1px solid rgba(0,0,0,0.12)' }}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            Export CSV
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-all hover:bg-surface-alt disabled:opacity-60"
+            style={{ background: '#fff', color: '#0F0F0F', border: '1px solid rgba(0,0,0,0.12)' }}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm6.707-12.707a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L8 7.414V13a1 1 0 102 0V7.414l1.293 1.293a1 1 0 001.414-1.414l-3-3z" clipRule="evenodd" /></svg>
+            {importing ? 'Importing…' : 'Import CSV'}
+          </button>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleImportFile} className="hidden" />
+          <button
+            onClick={() => navigate('/admin/products/new')}
+            className="flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl text-white transition-all hover:opacity-90"
+            style={{ background: '#0F0F0F' }}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            Add Product
+          </button>
+        </div>
       </div>
 
       {/* Category filter — row 1: parent categories */}

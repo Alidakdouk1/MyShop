@@ -37,9 +37,6 @@ class UserController
     {
         method('GET');
         $auth = AuthMiddleware::require();
-        $rows = (new BaseModel() instanceof BaseModel)
-            ? getDB()->prepare("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, id ASC")
-            : null;
         $stmt = getDB()->prepare("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, id ASC");
         $stmt->execute([(int) $auth['sub']]);
         success($stmt->fetchAll());
@@ -71,8 +68,7 @@ class UserController
             $street, $city, sanitize($data['state'] ?? ''), $country,
             sanitize($data['zip'] ?? ''), $isDefault,
         ]);
-        $id   = (int) getDB()->lastInsertId();
-        $addr = getDB()->prepare("SELECT * FROM addresses WHERE id = ?")->execute([$id]);
+        $id    = (int) getDB()->lastInsertId();
         $stmt2 = getDB()->prepare("SELECT * FROM addresses WHERE id = ?");
         $stmt2->execute([$id]);
         success($stmt2->fetch(), 'Address added.', 201);

@@ -6,6 +6,7 @@ import ProductGrid from '../components/product/ProductGrid'
 import ProductFilters from '../components/product/ProductFilters'
 import CategoryBar from '../components/product/CategoryBar'
 import Pagination from '../components/common/Pagination'
+import Seo from '../components/common/Seo'
 
 function imgSrc(url) {
   if (!url) return null
@@ -122,6 +123,11 @@ export default function Shop() {
 
   return (
     <>
+      <Seo
+        title={filters.search ? `Search: “${filters.search}”` : (banner.title || 'Shop All Products')}
+        description={banner.subtitle || 'Browse the full MyShop catalogue — filter by price, color, size and more.'}
+        canonical={`${window.location.origin}/shop`}
+      />
       {/* ── Category row — full-width bar flush under the search header ── */}
       <CategoryBar
         categories={categories}

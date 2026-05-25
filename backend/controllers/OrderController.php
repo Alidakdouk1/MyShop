@@ -25,10 +25,14 @@ class OrderController
         $items = $this->carts->items((int) $cart['id']);
         if (empty($items)) error('Cart is empty.', 422);
 
-        $subtotal    = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
-        $shippingFee = 8.00;
-        $discount    = 0.0;
-        $couponId    = null;
+        // Store-wide shipping & tax rules — keep in sync with src/lib/storeConfig.js
+        $FREE_SHIPPING_THRESHOLD = 50.00;  // free shipping at/above this subtotal
+        $FLAT_SHIPPING_FEE       = 8.00;   // otherwise this flat fee
+        $TAX_RATE                = 0.00;   // e.g. 0.08 = 8%; 0 disables tax
+
+        $subtotal = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
+        $discount = 0.0;
+        $couponId = null;
 
         if (!empty($data['coupon_code'])) {
             $coupon = $this->coupons->findByCode($data['coupon_code']);
@@ -37,9 +41,11 @@ class OrderController
             $couponId = (int) $coupon['id'];
         }
 
-        $total   = round($subtotal + $shippingFee - $discount, 2);
-        $method  = in_array($data['payment_method'] ?? '', ['stripe', 'cod'], true)
-                   ? $data['payment_method'] : 'cod';
+        $shippingFee = $subtotal >= $FREE_SHIPPING_THRESHOLD ? 0.00 : $FLAT_SHIPPING_FEE;
+        $tax         = round(max(0, $subtotal - $discount) * $TAX_RATE, 2);
+        $total       = round($subtotal - $discount + $shippingFee + $tax, 2);
+        $method      = in_array($data['payment_method'] ?? '', ['stripe', 'cod'], true)
+                       ? $data['payment_method'] : 'cod';
 
         $orderId = $this->orders->create([
             'user_id'        => $userId,
@@ -48,6 +54,7 @@ class OrderController
             'subtotal'       => $subtotal,
             'shipping_fee'   => $shippingFee,
             'discount'       => $discount,
+            'tax'            => $tax,
             'total'          => $total,
             'payment_method' => $method,
             'notes'          => sanitize($data['notes'] ?? ''),

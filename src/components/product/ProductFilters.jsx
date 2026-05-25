@@ -69,6 +69,15 @@ export default function ProductFilters({ filters, onChange, categories = [] }) {
     onChange({ ...filters, price_min: priceMin || undefined, price_max: priceMax || undefined, page: 1 })
   }
 
+  // Show "Clear" once a min/max has been typed or is already applied to the results
+  const hasPrice = priceMin !== '' || priceMax !== '' || !!filters.price_min || !!filters.price_max
+
+  const clearPrice = () => {
+    setPriceMin('')
+    setPriceMax('')
+    onChange({ ...filters, price_min: undefined, price_max: undefined, page: 1 })
+  }
+
   const setDynamicSelection = (filterId, optionId, isMulti) => {
     const next = { ...selectedByFilter }
     const current = next[filterId] || []
@@ -104,12 +113,22 @@ export default function ProductFilters({ filters, onChange, categories = [] }) {
             className="w-full border border-border rounded-lg px-3 py-2 text-sm text-ink outline-none focus:border-ink"
           />
         </div>
-        <button
-          onClick={applyPrice}
-          className="mt-3 w-full bg-ink text-white text-sm font-semibold py-2 rounded-lg hover:bg-ink/80 transition-colors"
-        >
-          Apply
-        </button>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            onClick={applyPrice}
+            className="flex-1 bg-ink text-white text-sm font-semibold py-2 rounded-lg hover:bg-ink/80 active:scale-[0.98] transition-all"
+          >
+            Apply
+          </button>
+          {hasPrice && (
+            <button
+              onClick={clearPrice}
+              className="px-4 py-2 text-sm font-semibold text-ink-secondary border border-border rounded-lg hover:border-ink/40 hover:text-ink active:scale-[0.98] transition-all"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </FilterSection>
 
       {/* Dynamic admin-managed filters (Size, Color, Material, …) */}
@@ -150,10 +169,10 @@ export default function ProductFilters({ filters, onChange, categories = [] }) {
                     <button
                       key={o.id}
                       type="button"
-                      title={o.value}
+                      title={`${o.value}${o.product_count != null ? ` — ${o.product_count} product${o.product_count === 1 ? '' : 's'}` : ''}`}
                       aria-label={o.value}
                       onClick={() => setDynamicSelection(f.id, o.id, isMulti)}
-                      className="relative w-7 h-7 rounded-full transition-transform hover:scale-110"
+                      className={`relative w-7 h-7 rounded-full transition-transform hover:scale-110 ${o.product_count === 0 && !checked ? 'opacity-45' : ''}`}
                       style={{
                         background: bg,
                         boxShadow: checked
@@ -181,18 +200,24 @@ export default function ProductFilters({ filters, onChange, categories = [] }) {
               <div className="grid grid-cols-3 gap-2">
                 {f.options.map(o => {
                   const checked = selected.includes(o.id)
+                  const count   = o.product_count
+                  const none    = count === 0
                   return (
                     <button
                       key={o.id}
                       type="button"
-                      title={`${o.value}${f.unit ? ` ${f.unit}` : ''}`}
+                      title={`${o.value}${f.unit ? ` ${f.unit}` : ''}${count != null ? ` — ${count} product${count === 1 ? '' : 's'}` : ''}`}
                       onClick={() => setDynamicSelection(f.id, o.id, isMulti)}
                       className={`text-xs font-semibold px-1 py-2 rounded-lg border text-center truncate transition-colors
                         ${checked
                           ? 'bg-ink text-white border-ink'
-                          : 'bg-surface border-border text-ink-secondary hover:border-ink/40'}`}
+                          : 'bg-surface border-border text-ink-secondary hover:border-ink/40'}
+                        ${none && !checked ? 'opacity-45' : ''}`}
                     >
                       {o.value}{f.unit ? ` ${f.unit}` : ''}
+                      {count != null && (
+                        <span className={checked ? 'text-white/55' : 'text-ink-tertiary'}> {count}</span>
+                      )}
                     </button>
                   )
                 })}
@@ -245,6 +270,14 @@ function DynamicRangeFilter({ filter, filters, onChange, open, onToggle }) {
     })
   }
 
+  const hasValue = min !== '' || max !== '' || !!filters[keyMin] || !!filters[keyMax]
+
+  const clear = () => {
+    setMin('')
+    setMax('')
+    onChange({ ...filters, [keyMin]: undefined, [keyMax]: undefined, page: 1 })
+  }
+
   return (
     <FilterSection title={filter.name} open={open} onToggle={onToggle}>
       <div className="flex items-center gap-2">
@@ -264,12 +297,22 @@ function DynamicRangeFilter({ filter, filters, onChange, open, onToggle }) {
           className="w-full border border-border rounded-lg px-3 py-2 text-sm text-ink outline-none focus:border-ink"
         />
       </div>
-      <button
-        onClick={apply}
-        className="mt-3 w-full bg-ink text-white text-sm font-semibold py-2 rounded-lg hover:bg-ink/80 transition-colors"
-      >
-        Apply
-      </button>
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          onClick={apply}
+          className="flex-1 bg-ink text-white text-sm font-semibold py-2 rounded-lg hover:bg-ink/80 active:scale-[0.98] transition-all"
+        >
+          Apply
+        </button>
+        {hasValue && (
+          <button
+            onClick={clear}
+            className="px-4 py-2 text-sm font-semibold text-ink-secondary border border-border rounded-lg hover:border-ink/40 hover:text-ink active:scale-[0.98] transition-all"
+          >
+            Clear
+          </button>
+        )}
+      </div>
     </FilterSection>
   )
 }

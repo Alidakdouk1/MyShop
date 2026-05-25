@@ -189,6 +189,124 @@ class AdminController
         ]);
     }
 
+    // ── Abandoned carts ─────────────────────────────────────────────────────
+
+    /** GET /api/admin/abandoned-carts?hours=1 — stale registered-user carts. */
+    public function abandonedCarts(): never
+    {
+        method('GET');
+        $this->guard();
+        $hours = isset($_GET['hours']) ? max(1, (int) $_GET['hours']) : 1;
+        $carts = (new CartModel())->abandoned($hours);
+        $value = array_sum(array_map(fn($c) => (float) $c['value'], $carts));
+        success([
+            'hours'       => $hours,
+            'count'       => count($carts),
+            'total_value' => round($value, 2),
+            'carts'       => $carts,
+        ]);
+    }
+
+    // ── Products CSV import / export ────────────────────────────────────────
+
+    private const CSV_COLS = ['id','category_id','name','slug','sku','base_price','sale_price','stock_qty','status','is_featured','weight','description'];
+
+    /** GET /api/admin/products/export — download the catalogue as CSV. */
+    public function exportProductsCsv(): never
+    {
+        method('GET');
+        $this->guard();
+        $cols = implode(', ', self::CSV_COLS);
+        $rows = getDB()->query("SELECT {$cols} FROM products ORDER BY id")->fetchAll();
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="products-' . date('Ymd') . '.csv"');
+        $out = fopen('php://output', 'w');
+        fputcsv($out, self::CSV_COLS);
+        foreach ($rows as $r) {
+            fputcsv($out, array_map(fn($c) => $r[$c] ?? '', self::CSV_COLS));
+        }
+        fclose($out);
+        exit;
+    }
+
+    /** POST /api/admin/products/import — upsert products from a CSV (multipart "file"). */
+    public function importProductsCsv(): never
+    {
+        method('POST');
+        $this->guard();
+        if (empty($_FILES['file']['tmp_name']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
+            error('Please upload a CSV file in the "file" field.', 422);
+        }
+        $fh = fopen($_FILES['file']['tmp_name'], 'r');
+        if (!$fh) error('Could not read the uploaded file.', 422);
+
+        $header = fgetcsv($fh);
+        if (!$header) error('The CSV file is empty.', 422);
+        $header = array_map(fn($h) => strtolower(trim((string) $h)), $header);
+
+        $model = new ProductModel();
+        $db    = getDB();
+        $created = 0; $updated = 0; $errors = [];
+        $line = 1;
+
+        while (($row = fgetcsv($fh)) !== false) {
+            $line++;
+            if (count(array_filter($row, fn($v) => $v !== null && $v !== '')) === 0) continue;
+            $r = [];
+            foreach ($header as $i => $col) $r[$col] = $row[$i] ?? null;
+
+            $name = trim((string) ($r['name'] ?? ''));
+            $sku  = trim((string) ($r['sku'] ?? ''));
+            if ($name === '' || $sku === '') { $errors[] = "Row {$line}: name and sku are required."; continue; }
+
+            $fields = [
+                'name'        => sanitize($name),
+                'category_id' => isset($r['category_id']) && $r['category_id'] !== '' ? (int) $r['category_id'] : null,
+                'description' => isset($r['description']) ? sanitize((string) $r['description']) : null,
+                'base_price'  => isset($r['base_price']) && is_numeric($r['base_price']) ? (float) $r['base_price'] : null,
+                'sale_price'  => isset($r['sale_price']) && $r['sale_price'] !== '' ? (float) $r['sale_price'] : null,
+                'stock_qty'   => isset($r['stock_qty']) && $r['stock_qty'] !== '' ? (int) $r['stock_qty'] : 0,
+                'sku'         => sanitize($sku),
+                'status'      => in_array($r['status'] ?? '', ['active','draft','archived'], true) ? $r['status'] : 'active',
+                'is_featured' => (int) ($r['is_featured'] ?? 0),
+                'weight'      => isset($r['weight']) && $r['weight'] !== '' ? (float) $r['weight'] : null,
+            ];
+
+            $existingId = null;
+            if (!empty($r['id'])) {
+                $st = $db->prepare("SELECT id FROM products WHERE id = ?");
+                $st->execute([(int) $r['id']]);
+                $existingId = $st->fetchColumn() ?: null;
+            }
+            if (!$existingId) {
+                $st = $db->prepare("SELECT id FROM products WHERE sku = ?");
+                $st->execute([$fields['sku']]);
+                $existingId = $st->fetchColumn() ?: null;
+            }
+
+            try {
+                if ($existingId) {
+                    $model->update((int) $existingId, array_filter($fields, fn($v) => $v !== null));
+                    $updated++;
+                } else {
+                    if ($fields['category_id'] === null || $fields['base_price'] === null) {
+                        $errors[] = "Row {$line}: new products need category_id and base_price.";
+                        continue;
+                    }
+                    $fields['slug'] = preg_replace('/[^a-z0-9]+/', '-', strtolower($name))
+                                    . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
+                    $model->create($fields);
+                    $created++;
+                }
+            } catch (\Throwable $e) {
+                $errors[] = "Row {$line}: " . $e->getMessage();
+            }
+        }
+        fclose($fh);
+        success(['created' => $created, 'updated' => $updated, 'errors' => $errors], 'Import complete.');
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────────
 
     public function users(): never

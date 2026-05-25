@@ -3,12 +3,12 @@
 -- Hash below is pre-generated for development use only
 
 INSERT IGNORE INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_verified`, `phone`) VALUES
-(1, 'Admin User',      'admin@myshop.com',    '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin',    1, '+1-555-0001'),
-(2, 'Fashion Store',   'vendor1@myshop.com',  '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'vendor',   1, '+1-555-0002'),
-(3, 'Tech World',      'vendor2@myshop.com',  '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'vendor',   1, '+1-555-0003'),
-(4, 'Alice Johnson',   'alice@example.com',   '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'customer', 1, '+1-555-0004'),
-(5, 'Bob Smith',       'bob@example.com',     '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'customer', 1, '+1-555-0005'),
-(6, 'Carol Davis',     'carol@example.com',   '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'customer', 0, '+1-555-0006');
+(1, 'Admin User',      'admin@myshop.com',    '$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12', 'admin',    1, '+1-555-0001'),
+(2, 'Fashion Store',   'vendor1@myshop.com',  '$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12', 'vendor',   1, '+1-555-0002'),
+(3, 'Tech World',      'vendor2@myshop.com',  '$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12', 'vendor',   1, '+1-555-0003'),
+(4, 'Alice Johnson',   'alice@example.com',   '$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12', 'customer', 1, '+1-555-0004'),
+(5, 'Bob Smith',       'bob@example.com',     '$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12', 'customer', 1, '+1-555-0005'),
+(6, 'Carol Davis',     'carol@example.com',   '$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12', 'customer', 0, '+1-555-0006');
 
 INSERT IGNORE INTO `vendor_profiles`
   (`id`, `user_id`, `store_name`, `store_slug`, `bio`, `rating_avg`, `total_sales`, `is_approved`) VALUES

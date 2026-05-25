@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { getOrder, cancelOrder } from '../../api/orderApi'
+import { getOrder, cancelOrder, getReturns, createReturn } from '../../api/orderApi'
 import { useToast } from '../../hooks/useToast'
 import Spinner from '../../components/ui/Spinner'
+
+const RETURN_STATUS = {
+  requested: { bg: '#FEF9EC', text: '#B8922E', label: 'Requested' },
+  approved:  { bg: '#EFF6FF', text: '#0284C7', label: 'Approved' },
+  rejected:  { bg: '#FEF2F2', text: '#C0392B', label: 'Rejected' },
+  completed: { bg: '#F0FDF4', text: '#16A34A', label: 'Completed' },
+}
 
 const STEPS = [
   { key: 'pending',   label: 'Order Placed',  icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
@@ -86,13 +93,37 @@ export default function OrderDetail() {
   const [order,      setOrder]      = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [cancelling, setCancelling] = useState(false)
+  const [returnReq,        setReturnReq]        = useState(null)
+  const [showReturnForm,   setShowReturnForm]   = useState(false)
+  const [returnReason,     setReturnReason]     = useState('')
+  const [returnSubmitting, setReturnSubmitting] = useState(false)
 
   useEffect(() => {
     getOrder(id)
       .then(r => setOrder(r.data.data))
       .catch(() => {})
       .finally(() => setLoading(false))
+    getReturns()
+      .then(r => setReturnReq((r.data.data || []).find(x => Number(x.order_id) === Number(id)) || null))
+      .catch(() => {})
   }, [id])
+
+  const handleReturn = async (e) => {
+    e.preventDefault()
+    if (!returnReason.trim()) return
+    setReturnSubmitting(true)
+    try {
+      const { data } = await createReturn({ order_id: id, reason: returnReason.trim() })
+      setReturnReq(data.data)
+      setShowReturnForm(false)
+      setReturnReason('')
+      toast.success('Return request submitted')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not submit return')
+    } finally {
+      setReturnSubmitting(false)
+    }
+  }
 
   const handleCancel = async () => {
     if (!confirm('Cancel this order?')) return
@@ -129,6 +160,7 @@ export default function OrderDetail() {
   const subtotal  = Number(order.subtotal || 0)
   const shipping  = Number(order.shipping_fee || 0)
   const discount  = Number(order.discount || 0)
+  const tax       = Number(order.tax || 0)
   const total     = Number(order.total || 0)
 
   return (
@@ -205,6 +237,69 @@ export default function OrderDetail() {
           </div>
         )}
       </div>
+
+      {/* Returns / RMA — for delivered orders (or once a request exists) */}
+      {(order.status === 'delivered' || returnReq) && (
+        <div className="rounded-2xl border p-6 mb-4" style={{ background: '#fff', borderColor: 'rgba(0,0,0,0.07)' }}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#9C9894' }}>Returns</p>
+            {returnReq && (
+              <span
+                className="text-[11px] font-bold px-2.5 py-1 rounded-full"
+                style={{
+                  background: (RETURN_STATUS[returnReq.status] || RETURN_STATUS.requested).bg,
+                  color: (RETURN_STATUS[returnReq.status] || RETURN_STATUS.requested).text,
+                }}
+              >
+                {(RETURN_STATUS[returnReq.status] || RETURN_STATUS.requested).label}
+              </span>
+            )}
+          </div>
+
+          {returnReq ? (
+            <div className="mt-3 text-sm" style={{ color: '#5C5854' }}>
+              <p><span className="font-semibold" style={{ color: '#0F0F0F' }}>Reason:</span> {returnReq.reason}</p>
+              {returnReq.admin_note && (
+                <p className="mt-1"><span className="font-semibold" style={{ color: '#0F0F0F' }}>Store note:</span> {returnReq.admin_note}</p>
+              )}
+              <p className="text-xs mt-2" style={{ color: '#9C9894' }}>
+                Requested {new Date(returnReq.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
+          ) : showReturnForm ? (
+            <form onSubmit={handleReturn} className="mt-3">
+              <textarea
+                value={returnReason}
+                onChange={e => setReturnReason(e.target.value)}
+                required rows={3}
+                placeholder="Tell us why you'd like to return this order…"
+                className="w-full text-sm rounded-xl p-3 outline-none"
+                style={{ border: '1.5px solid #E4E1D9', background: '#fff', color: '#0F0F0F' }}
+              />
+              <div className="flex gap-2 mt-2">
+                <button type="submit" disabled={returnSubmitting}
+                  className="text-sm font-bold px-4 py-2 rounded-xl text-white"
+                  style={{ background: '#0F0F0F', opacity: returnSubmitting ? 0.6 : 1 }}>
+                  {returnSubmitting ? 'Submitting…' : 'Submit Request'}
+                </button>
+                <button type="button" onClick={() => setShowReturnForm(false)}
+                  className="text-sm font-semibold px-4 py-2 rounded-xl" style={{ color: '#9C9894' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-sm" style={{ color: '#9C9894' }}>Not happy with your order? Request a return.</p>
+              <button onClick={() => setShowReturnForm(true)}
+                className="text-sm font-bold px-4 py-2 rounded-xl transition-all hover:opacity-70"
+                style={{ border: '1.5px solid #0F0F0F', color: '#0F0F0F' }}>
+                Request a Return
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Product list */}
       <div className="rounded-2xl border mb-4 overflow-hidden"
@@ -285,6 +380,11 @@ export default function OrderDetail() {
           {discount > 0 && (
             <div className="flex justify-between text-sm" style={{ color: '#16A34A' }}>
               <span>Discount</span><span>−${discount.toFixed(2)}</span>
+            </div>
+          )}
+          {tax > 0 && (
+            <div className="flex justify-between text-sm" style={{ color: '#5C5854' }}>
+              <span>Tax</span><span>${tax.toFixed(2)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-base pt-2 border-t" style={{ borderColor: 'rgba(0,0,0,0.08)', color: '#0F0F0F' }}>

@@ -229,6 +229,22 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 @keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .animate-drawer-in { animation: drawerIn 0.38s var(--ease-out-soft) both; }
 
+/* Announcement bar — seamless infinite marquee (two identical groups, each
+   ≥100% wide, both sliding -100% so the clone takes the original's place) */
+.marquee { display: flex; overflow: hidden; }
+.marquee__group {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-width: 100%;
+  animation-name: announceMarquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+.marquee:hover .marquee__group { animation-play-state: paused; }
+@keyframes announceMarquee { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
 /* ── Accessibility: honour reduced-motion globally ───────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -243,4 +259,6 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
     opacity: 1 !important;
     transform: none !important;
   }
+  /* Stop the announcement marquee from snapping; show it static instead */
+  .marquee__group { animation: none !important; transform: none !important; }
 }

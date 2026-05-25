@@ -1,0 +1,14 @@
+{
+  "name": "MyShop — Modern Online Store",
+  "short_name": "MyShop",
+  "description": "Premium products, fast shipping and easy returns.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FAFAF8",
+  "theme_color": "#0F0F0F",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

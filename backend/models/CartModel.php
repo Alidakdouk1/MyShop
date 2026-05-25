@@ -23,6 +23,24 @@ class CartModel extends BaseModel
         return $cart;
     }
 
+    /** Registered-user carts with items that have gone stale (recovery candidates). */
+    public function abandoned(int $hours = 1): array
+    {
+        return $this->query(
+            "SELECT c.id, c.user_id, u.name AS customer_name, u.email,
+                    COUNT(ci.id) AS item_count,
+                    COALESCE(SUM(ci.price_snapshot * ci.quantity), 0) AS value,
+                    c.updated_at
+             FROM cart c
+             JOIN cart_items ci ON ci.cart_id = c.id
+             JOIN users u ON u.id = c.user_id
+             WHERE c.user_id IS NOT NULL
+               AND c.updated_at < DATE_SUB(NOW(), INTERVAL " . (int) $hours . " HOUR)
+             GROUP BY c.id, c.user_id, u.name, u.email, c.updated_at
+             ORDER BY value DESC"
+        )->fetchAll();
+    }
+
     public function items(int $cartId): array
     {
         $rows = $this->query(

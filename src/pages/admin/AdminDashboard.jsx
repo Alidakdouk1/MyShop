@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getAdminDashboard } from '../../api/adminApi'
+import { getAdminDashboard, getAbandonedCarts } from '../../api/adminApi'
 import Spinner from '../../components/ui/Spinner'
 
 function StatCard({ label, value, sub, accent, icon }) {
@@ -35,6 +35,34 @@ function StatCard({ label, value, sub, accent, icon }) {
   )
 }
 
+// Lightweight dependency-free bar chart for daily revenue.
+function SalesChart({ data = [] }) {
+  if (!data.length) {
+    return (
+      <div className="h-44 flex items-center justify-center text-sm" style={{ color: '#9C9894' }}>
+        No sales data yet — it’ll appear here as orders come in.
+      </div>
+    )
+  }
+  const max = Math.max(...data.map(d => Number(d.revenue) || 0), 1)
+  return (
+    <div className="flex items-end gap-1 h-44">
+      {data.map((d, i) => {
+        const rev = Number(d.revenue) || 0
+        const h   = Math.max(2, (rev / max) * 100)
+        return (
+          <div
+            key={i}
+            title={`${d.date} · $${rev.toFixed(2)} · ${d.orders} order${Number(d.orders) === 1 ? '' : 's'}`}
+            className="flex-1 rounded-t hover:opacity-80 transition-opacity cursor-default"
+            style={{ height: `${h}%`, background: 'linear-gradient(180deg, #C0392B 0%, #0F0F0F 100%)' }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 const STATUS_COLOR = {
   pending:   { bg: '#FEF9EC', text: '#D97706' },
   confirmed: { bg: '#EFF6FF', text: '#0284C7' },
@@ -47,12 +75,16 @@ const STATUS_COLOR = {
 export default function AdminDashboard() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const [abandoned, setAbandoned] = useState(null)
 
   useEffect(() => {
     getAdminDashboard()
       .then(r => setData(r.data.data))
       .catch(() => {})
       .finally(() => setLoading(false))
+    getAbandonedCarts()
+      .then(r => setAbandoned(r.data.data))
+      .catch(() => {})
   }, [])
 
   if (loading) {
@@ -179,6 +211,80 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+
+      {/* Sales chart + Top products */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div className="lg:col-span-2 rounded-2xl p-6" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-base" style={{ color: '#0F0F0F' }}>Revenue · Last 30 Days</h2>
+            <span className="text-xs" style={{ color: '#9C9894' }}>paid orders</span>
+          </div>
+          <SalesChart data={data?.daily_sales || []} />
+        </div>
+
+        <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
+          <h2 className="font-bold text-base mb-3" style={{ color: '#0F0F0F' }}>Top Products</h2>
+          {data?.top_products?.length ? (
+            <div className="flex flex-col gap-2.5">
+              {data.top_products.map((p, i) => (
+                <Link key={p.id} to={`/products/${p.slug}`} className="flex items-center gap-3 group">
+                  <span className="w-5 text-sm font-black shrink-0" style={{ color: '#C8C4BC' }}>{i + 1}</span>
+                  <span className="flex-1 min-w-0 text-sm font-medium truncate group-hover:underline" style={{ color: '#0F0F0F' }}>{p.name}</span>
+                  <span className="text-xs font-bold shrink-0" style={{ color: '#16A34A' }}>{p.units_sold} sold</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: '#9C9894' }}>No sales yet.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Low-stock alerts */}
+      {data?.low_stock?.length > 0 && (
+        <div className="rounded-2xl p-5 mb-4" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="font-bold text-base" style={{ color: '#0F0F0F' }}>Low Stock Alerts</h2>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#FEF2F2', color: '#C0392B' }}>{data.low_stock.length}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.low_stock.map(p => (
+              <Link
+                key={p.id}
+                to={`/admin/products/${p.id}/edit`}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-opacity hover:opacity-80"
+                style={{ background: '#FEF9EC' }}
+              >
+                <span className="font-medium truncate max-w-[160px]" style={{ color: '#92700A' }}>{p.name}</span>
+                <span className="font-black" style={{ color: p.stock_qty === 0 ? '#C0392B' : '#D97706' }}>{p.stock_qty}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Abandoned carts */}
+      {abandoned?.count > 0 && (
+        <div className="rounded-2xl p-5 mb-4" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <div className="flex items-center gap-2">
+              <h2 className="font-bold text-base" style={{ color: '#0F0F0F' }}>Abandoned Carts</h2>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#FEF2F2', color: '#C0392B' }}>{abandoned.count}</span>
+            </div>
+            <span className="text-sm font-bold" style={{ color: '#16A34A' }}>${Number(abandoned.total_value).toFixed(2)} recoverable</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {abandoned.carts.slice(0, 6).map(c => (
+              <div key={c.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="truncate" style={{ color: '#5C5854' }}>{c.customer_name} · {c.email}</span>
+                <span className="shrink-0" style={{ color: '#9C9894' }}>
+                  {c.item_count} item{Number(c.item_count) === 1 ? '' : 's'} · <span className="font-bold" style={{ color: '#0F0F0F' }}>${Number(c.value).toFixed(2)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent orders */}
       {data?.recent_orders?.length > 0 && (

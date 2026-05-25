@@ -12,3 +12,11 @@ createRoot(document.getElementById('root')).render(
     </Provider>
   </StrictMode>,
 )
+
+// Register the PWA service worker in production builds only (avoids caching
+// conflicts with Vite's dev HMR).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}

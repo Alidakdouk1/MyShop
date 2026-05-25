@@ -11,5 +11,6 @@ export const deleteProduct     = (id)          => api.delete(`/products/${id}`)
 export const uploadProductImage = (id, formData) =>
   api.post(`/products/${id}/images`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const getProductReviews = (id)          => api.get(`/products/${id}/reviews`)
+export const notifyBackInStock = (id, email)   => api.post(`/products/${id}/notify-me`, { email })
 export const createReview      = (data)        => api.post('/reviews', data)
 export const deleteReview      = (id)          => api.delete(`/reviews/${id}`)

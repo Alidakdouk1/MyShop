@@ -1,4 +1,59 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { subscribeNewsletter } from '../../api/newsletterApi'
+import { useToast } from '../../hooks/useToast'
+
+function NewsletterSignup() {
+  const toast = useToast()
+  const [email, setEmail]     = useState('')
+  const [loading, setLoading] = useState(false)
+  const [done, setDone]       = useState(false)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    if (!email.trim()) return
+    setLoading(true)
+    try {
+      const { data } = await subscribeNewsletter(email.trim())
+      toast.success(data?.message || 'Thanks for subscribing!')
+      setDone(true)
+      setEmail('')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Subscription failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="border-b border-white/10 pb-10 mb-10 grid md:grid-cols-2 gap-6 items-center">
+      <div>
+        <h3 className="hero-display text-3xl tracking-wide">JOIN THE LIST</h3>
+        <p className="text-sm text-white/60 mt-2 max-w-sm">
+          Subscribe for new arrivals, exclusive offers, and early access to sales.
+        </p>
+      </div>
+      <form onSubmit={submit} className="flex gap-2 w-full md:justify-end">
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={e => { setEmail(e.target.value); setDone(false) }}
+          placeholder="Enter your email"
+          className="flex-1 md:max-w-xs bg-white/10 border border-white/15 rounded-xl px-4 py-3 text-sm
+            text-white placeholder-white/40 outline-none focus:border-white/40 focus:bg-white/15 transition-all"
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="shine bg-white text-ink font-bold text-sm px-6 rounded-xl hover:bg-white/90 active:scale-95 transition-all disabled:opacity-60"
+        >
+          {loading ? '…' : done ? 'Subscribed ✓' : 'Subscribe'}
+        </button>
+      </form>
+    </div>
+  )
+}
 
 const LINKS = {
   Shop: [
@@ -27,6 +82,7 @@ export default function Footer() {
       {/* Premium accent rule */}
       <div className="h-0.5 w-full bg-linear-to-r from-transparent via-accent to-transparent opacity-70" />
       <div className="max-w-screen-xl mx-auto px-4 pt-14 pb-8">
+        <NewsletterSignup />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-12">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">

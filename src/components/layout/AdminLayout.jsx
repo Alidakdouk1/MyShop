@@ -67,6 +67,14 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/returns', label: 'Returns',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a5 5 0 015 5v2a1 1 0 11-2 0v-2a3 3 0 00-3-3H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/homepage', label: 'Homepage',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">

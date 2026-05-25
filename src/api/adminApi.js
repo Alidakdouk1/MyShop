@@ -1,7 +1,8 @@
 import api from './axios'
 
 // Dashboard
-export const getAdminDashboard = ()           => api.get('/admin/dashboard')
+export const getAdminDashboard  = ()          => api.get('/admin/dashboard')
+export const getAbandonedCarts  = (hours)     => api.get('/admin/abandoned-carts', { params: hours ? { hours } : {} })
 
 // Users
 export const getAdminUsers     = (params)     => api.get('/admin/users', { params })
@@ -20,6 +21,10 @@ export const deleteAdmin       = (id)         => api.delete(`/admin/admins/${id}
 export const getAdminOrders    = (params)     => api.get('/admin/orders', { params })
 export const updateOrderStatus = (id, status) => api.put(`/admin/orders/${id}/status`, { status })
 
+// Returns / RMA
+export const getAdminReturns    = (params)    => api.get('/admin/returns', { params })
+export const updateReturnStatus = (id, data)  => api.put(`/admin/returns/${id}`, data)
+
 // Products
 export const getAdminProducts       = (params)       => api.get('/admin/products', { params })
 export const getAdminProduct        = (id)           => api.get(`/admin/products/${id}`)
@@ -30,6 +35,8 @@ export const adminUploadImage       = (id, formData) => api.post(`/admin/product
 export const adminDeleteImage       = (id, imgId)    => api.delete(`/admin/products/${id}/images/${imgId}`)
 export const adminAddVariant        = (id, data)     => api.post(`/admin/products/${id}/variants`, data)
 export const adminDeleteVariant     = (id, vid)      => api.delete(`/admin/products/${id}/variants/${vid}`)
+export const exportProductsCsv      = ()             => api.get('/admin/products/export', { responseType: 'blob' })
+export const importProductsCsv      = (formData)     => api.post('/admin/products/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 
 // Categories
 export const getAdminCategories    = ()           => api.get('/admin/categories')

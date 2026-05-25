@@ -29,7 +29,8 @@ class FilterModel extends BaseModel
         foreach ($filters as &$f) {
             $f['options'] = $grouped[(int) $f['id']] ?? [];
         }
-        return $filters;
+        unset($f);
+        return $this->attachCounts($filters);
     }
 
     /**
@@ -71,6 +72,42 @@ class FilterModel extends BaseModel
         }
         foreach ($filters as &$f) {
             $f['options'] = $grouped[(int) $f['id']] ?? [];
+        }
+        unset($f);
+        return $this->attachCounts($filters);
+    }
+
+    /** [option_id => # of active products tagged with that option]. */
+    private function optionCounts(array $optionIds): array
+    {
+        $optionIds = array_values(array_filter(array_map('intval', $optionIds)));
+        if (!$optionIds) return [];
+        $ph   = implode(',', array_fill(0, count($optionIds), '?'));
+        $rows = $this->query(
+            "SELECT pfv.filter_option_id AS oid, COUNT(DISTINCT pfv.product_id) AS c
+             FROM product_filter_values pfv
+             JOIN products p ON p.id = pfv.product_id AND p.status = 'active'
+             WHERE pfv.filter_option_id IN ({$ph})
+             GROUP BY pfv.filter_option_id",
+            $optionIds
+        )->fetchAll();
+        $out = [];
+        foreach ($rows as $r) $out[(int) $r['oid']] = (int) $r['c'];
+        return $out;
+    }
+
+    /** Adds product_count to every option (index-based to avoid foreach-ref bugs). */
+    private function attachCounts(array $filters): array
+    {
+        $ids = [];
+        foreach ($filters as $f) {
+            foreach ($f['options'] ?? [] as $o) $ids[] = (int) $o['id'];
+        }
+        $counts = $this->optionCounts($ids);
+        foreach ($filters as $fi => $f) {
+            foreach (($f['options'] ?? []) as $oi => $o) {
+                $filters[$fi]['options'][$oi]['product_count'] = $counts[(int) $o['id']] ?? 0;
+            }
         }
         return $filters;
     }

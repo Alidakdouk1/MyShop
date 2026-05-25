@@ -5,6 +5,13 @@ class MailHelper
 {
     public static function send(string $to, string $subject, string $htmlBody): bool
     {
+        // Only attempt delivery when mail is explicitly enabled. On dev setups
+        // without an SMTP server, a raw mail() call emits a PHP warning that gets
+        // prepended to the JSON response and breaks the client — so this stays a
+        // safe no-op until MAIL_ENABLED=true and SMTP is configured.
+        if (env('MAIL_ENABLED', 'false') !== 'true') {
+            return false;
+        }
         $from     = env('MAIL_FROM_ADDRESS', 'noreply@myshop.com');
         $fromName = env('MAIL_FROM_NAME', 'MyShop');
         $headers  = implode("\r\n", [
@@ -14,7 +21,11 @@ class MailHelper
             "Reply-To: {$from}",
             "X-Mailer: PHP/" . phpversion(),
         ]);
-        return mail($to, $subject, $htmlBody, $headers);
+        try {
+            return @mail($to, $subject, $htmlBody, $headers);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     public static function welcome(string $to, string $name, string $token): bool

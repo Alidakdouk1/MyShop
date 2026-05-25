@@ -2,6 +2,20 @@ import { useState, useEffect } from 'react'
 import { getProducts, getCategories } from '../api/productApi'
 import { getHomepageSections } from '../api/adminApi'
 import SectionRenderer from '../components/homepage/SectionRenderer'
+import Seo from '../components/common/Seo'
+
+const ORIGIN = typeof window !== 'undefined' ? window.location.origin : ''
+const HOME_JSONLD = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'MyShop',
+  url: ORIGIN || undefined,
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: `${ORIGIN}/shop?search={query}`,
+    'query-input': 'required name=query',
+  },
+}
 
 export default function Home() {
   const [sections,   setSections]   = useState([])
@@ -53,6 +67,7 @@ export default function Home() {
 
   return (
     <div className="bg-bg">
+      <Seo canonical={ORIGIN ? `${ORIGIN}/` : undefined} jsonLd={HOME_JSONLD} />
       {sections.map(section => (
         <SectionRenderer
           key={section.id}
