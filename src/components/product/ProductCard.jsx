@@ -60,7 +60,7 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
 
   return (
     <Link to={`/products/${product.slug}`} className="group product-card block">
-      <div className={`bg-surface ${shapeClass} overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}>
+      <div className={`bg-surface ${shapeClass} overflow-hidden ring-1 ring-border/60 shadow-soft hover:shadow-float hover:ring-ink/10 transition-all duration-500 ease-(--ease-out-soft) hover:-translate-y-1.5`}>
         {/* Image */}
         <div className="relative overflow-hidden bg-surface-alt" style={{ aspectRatio: imageRatio }}>
           <img
@@ -69,6 +69,8 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
             className="w-full h-full object-cover product-card-img"
             loading="lazy"
           />
+          {/* Soft gradient sheen that lifts on hover */}
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-ink/15 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           {/* Badges */}
           {showBadges && (
             <div className="absolute top-3 left-3 flex flex-col gap-1.5">
@@ -79,11 +81,12 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
           {/* Wishlist */}
           <button
             onClick={handleWishlist}
+            aria-label={isWished ? 'Remove from wishlist' : 'Add to wishlist'}
             className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center
-              transition-all duration-200 shadow-md
+              transition-all duration-300 ease-(--ease-out-back) shadow-md active:scale-90
               ${isWished
                 ? 'bg-accent text-white scale-100'
-                : 'bg-white/80 text-ink-tertiary hover:text-accent hover:bg-white'
+                : 'bg-white/70 backdrop-blur-md text-ink-tertiary hover:text-accent hover:bg-white hover:scale-110'
               }`}
           >
             <svg className="w-4.5 h-4.5" fill={isWished ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
@@ -93,11 +96,11 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
           </button>
           {/* Quick add — only for products without variants */}
           {showQuickAdd && !hasVariants && (
-            <div className="absolute bottom-0 inset-x-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+            <div className="absolute bottom-0 inset-x-0 p-3 translate-y-full opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-(--ease-out-soft)">
               <button
                 onClick={handleAddToCart}
                 disabled={adding}
-                className="w-full bg-ink text-white text-sm font-semibold py-2.5 rounded-xl
+                className="shine w-full bg-ink text-white text-sm font-semibold py-2.5 rounded-xl
                   hover:bg-ink/90 active:scale-[0.98] transition-all duration-150
                   disabled:opacity-70 disabled:cursor-not-allowed"
               >

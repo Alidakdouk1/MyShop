@@ -24,6 +24,8 @@ const LINKS = {
 export default function Footer() {
   return (
     <footer className="bg-ink text-white mt-20">
+      {/* Premium accent rule */}
+      <div className="h-0.5 w-full bg-linear-to-r from-transparent via-accent to-transparent opacity-70" />
       <div className="max-w-screen-xl mx-auto px-4 pt-14 pb-8">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-12">
           {/* Brand */}
@@ -34,7 +36,7 @@ export default function Footer() {
             </p>
             <div className="flex gap-3 mt-5">
               {['M', 'T', 'I', 'F'].map(s => (
-                <div key={s} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold cursor-pointer transition-colors">
+                <div key={s} className="w-9 h-9 rounded-full bg-white/10 hover:bg-accent flex items-center justify-center text-xs font-bold cursor-pointer transition-all duration-300 ease-(--ease-out-back) hover:-translate-y-1 hover:scale-110">
                   {s}
                 </div>
               ))}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import Reveal from '../../common/Reveal'
 
 function Countdown({ endDate, textColor }) {
   const [left, setLeft] = useState({})
@@ -48,6 +49,7 @@ export default function OfferSection({ data = {} }) {
 
   return (
     <section
+      className="relative overflow-hidden"
       style={{
         background:    data.bg_color || '#C0392B',
         paddingTop:    `${paddingY}px`,
@@ -61,7 +63,12 @@ export default function OfferSection({ data = {} }) {
         justifyContent:minHeight > 0 ? 'center' : undefined,
       }}
     >
-      <div style={{ maxWidth: `${maxWidth}px`, width: '100%', margin: '0 auto' }}>
+      {/* Soft light highlights for depth — purely decorative */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ backgroundImage: 'radial-gradient(circle at 15% 0%, rgba(255,255,255,0.18), transparent 45%), radial-gradient(circle at 85% 100%, rgba(0,0,0,0.18), transparent 45%)' }}
+      />
+      <Reveal variant="up" className="relative" style={{ maxWidth: `${maxWidth}px`, width: '100%', margin: '0 auto' }}>
         {data.title && (
           <h2 className="text-4xl font-black mb-2" style={{ color: data.text_color || '#ffffff' }}>
             {data.title}
@@ -78,13 +85,14 @@ export default function OfferSection({ data = {} }) {
         {data.cta && data.cta_link && (
           <Link
             to={data.cta_link}
-            className="inline-block mt-8 bg-white font-bold text-sm px-8 py-3 rounded-xl hover:bg-white/90 transition-all"
+            className="shine inline-block mt-8 bg-white font-bold text-sm px-8 py-3.5 rounded-xl shadow-lg
+              hover:-translate-y-0.5 hover:shadow-xl active:scale-95 transition-all duration-300 ease-(--ease-out-soft)"
             style={{ color: data.bg_color || '#C0392B' }}
           >
             {data.cta}
           </Link>
         )}
-      </div>
+      </Reveal>
     </section>
   )
 }

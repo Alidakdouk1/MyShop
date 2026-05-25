@@ -116,15 +116,15 @@ export default function Navbar({ headerRef, hidden = false }) {
     if (search.trim()) { navigate(`/shop?search=${encodeURIComponent(search.trim())}`); setSearch('') }
   }
 
-  const dashLink = user?.role === 'admin' ? '/admin' : '/account'
-
   return (
     <>
       <header
         ref={headerRef}
         style={{ transform: hidden ? 'translateY(-100%)' : 'translateY(0)' }}
-        className={`sticky top-0 z-50 bg-surface transition-[transform,box-shadow] duration-300 will-change-transform ${
-          location.pathname === '/shop' ? '' : (scrolled ? 'shadow-md' : 'border-b border-border')
+        className={`sticky top-0 z-50 transition-[transform,box-shadow,background-color] duration-300 will-change-transform ${
+          scrolled ? 'glass shadow-premium' : 'bg-surface'
+        } ${
+          location.pathname === '/shop' ? '' : (scrolled ? '' : 'border-b border-border')
         }`}
       >
         <AnnouncementBar />
@@ -146,7 +146,7 @@ export default function Navbar({ headerRef, hidden = false }) {
             </button>
 
             {/* Logo */}
-            <Link to="/" className="flex-shrink-0 mr-2">
+            <Link to="/" className="flex-shrink-0 mr-2 transition-transform duration-200 hover:scale-[1.04] active:scale-95">
               <span className="hero-display text-2xl tracking-wider text-ink">MY<span className="text-accent">SHOP</span></span>
             </Link>
 
@@ -187,7 +187,7 @@ export default function Navbar({ headerRef, hidden = false }) {
             <div className="flex items-center gap-1 ml-auto">
               {/* Wishlist */}
               {user && (
-                <Link to="/account/wishlist" className="relative p-2.5 rounded-xl hover:bg-surface-alt transition-colors">
+                <Link to="/account/wishlist" className="relative p-2.5 rounded-xl hover:bg-surface-alt transition-all duration-200 hover:-translate-y-0.5 active:scale-90">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -199,7 +199,8 @@ export default function Navbar({ headerRef, hidden = false }) {
               {/* Cart */}
               <button
                 onClick={() => dispatch(toggleCart())}
-                className="relative p-2.5 rounded-xl hover:bg-surface-alt transition-colors"
+                className="relative p-2.5 rounded-xl hover:bg-surface-alt transition-all duration-200 hover:-translate-y-0.5 active:scale-90"
+                aria-label="Open cart"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -321,8 +322,10 @@ export default function Navbar({ headerRef, hidden = false }) {
 
 function CountBadge({ count }) {
   return (
-    <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent text-white text-[10px] font-bold
-      rounded-full flex items-center justify-center leading-none">
+    <span
+      key={count}
+      className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-accent text-white text-[10px] font-bold
+        rounded-full flex items-center justify-center leading-none ring-2 ring-surface animate-badge-pop">
       {count > 99 ? '99+' : count}
     </span>
   )
@@ -348,8 +351,8 @@ function CartDrawer() {
 
   return (
     <div className="fixed inset-0 z-[90] flex justify-end">
-      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={() => dispatch(toggleCart())} />
-      <div className="relative bg-surface w-full max-w-md h-full flex flex-col shadow-2xl animate-slide-down">
+      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-fade-in" onClick={() => dispatch(toggleCart())} />
+      <div className="relative bg-surface w-full max-w-md h-full flex flex-col shadow-2xl animate-drawer-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-lg font-bold text-ink">
             Shopping Cart {cartItems.length > 0 && <span className="text-ink-tertiary font-normal text-sm">({cartItems.length})</span>}
@@ -425,7 +428,7 @@ function CartDrawer() {
             </div>
             <button
               onClick={() => { dispatch(toggleCart()); navigate('/checkout') }}
-              className="w-full bg-ink text-white font-bold py-3.5 rounded-xl hover:bg-ink/80 active:scale-[0.98] transition-all"
+              className="shine w-full bg-ink text-white font-bold py-3.5 rounded-xl hover:bg-ink/80 active:scale-[0.98] transition-all"
             >
               Checkout · ${total.toFixed(2)}
             </button>

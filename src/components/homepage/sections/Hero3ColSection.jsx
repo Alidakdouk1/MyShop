@@ -97,7 +97,7 @@ export default function Hero3ColSection({ data = {} }) {
   return (
     <>
       <style>{SLIDE_CSS}</style>
-      <div className="max-w-screen-xl mx-auto px-4 pt-4 pb-2">
+      <div className="max-w-screen-xl mx-auto px-4 pt-4 pb-2 hero-rise">
         <div className="flex gap-1.5 h-[280px] md:h-[400px] lg:h-[440px]">
 
           {/* Left: 3 stacked banners */}
@@ -159,7 +159,7 @@ export default function Hero3ColSection({ data = {} }) {
               </div>
               <div className="h-full flex flex-col justify-between pl-10 md:pl-12 pr-4 md:pr-8 py-5 md:py-7">
                 <div>
-                  <div className="flex flex-col items-center justify-center rounded-full text-white text-center shrink-0" style={{ width: 72, height: 72, background: center.accent_color || '#C0392B' }}>
+                  <div className="flex flex-col items-center justify-center rounded-full text-white text-center shrink-0 shadow-lg animate-float" style={{ width: 72, height: 72, background: center.accent_color || '#C0392B' }}>
                     <span className="text-[9px] font-bold leading-none">UP TO</span>
                     <span className="text-xl font-black leading-tight">90%</span>
                     <span className="text-[9px] font-bold leading-none">OFF</span>

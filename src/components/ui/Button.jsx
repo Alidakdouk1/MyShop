@@ -18,16 +18,20 @@ const sizes = {
   xl: 'px-9   py-4   text-base h-14',
 }
 
+// Filled variants get a subtle light sweep on hover for a premium feel
+const SHINE_VARIANTS = new Set(['primary', 'accent', 'success'])
+
 export default function Button({
   variant = 'primary', size = 'md', className = '',
   children, loading = false, icon, iconRight, ...props
 }) {
+  const shine = SHINE_VARIANTS.has(variant) ? 'shine relative overflow-hidden' : ''
   return (
     <button
       className={`inline-flex items-center justify-center gap-2 font-semibold rounded-lg
-        transition-all duration-200 cursor-pointer select-none
+        transition-all duration-200 ease-(--ease-out-soft) cursor-pointer select-none
         disabled:opacity-50 disabled:cursor-not-allowed
-        ${variants[variant]} ${sizes[size]} ${className}`}
+        ${shine} ${variants[variant]} ${sizes[size]} ${className}`}
       disabled={loading || props.disabled}
       {...props}
     >

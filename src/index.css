@@ -89,8 +89,8 @@ body {
 .category-card img { transition: transform 0.5s ease; }
 .category-card:hover img { transform: scale(1.06); }
 
-.product-card-img { transition: transform 0.4s ease; }
-.product-card:hover .product-card-img { transform: scale(1.04); }
+.product-card-img { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.product-card:hover .product-card-img { transform: scale(1.07); }
 
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -109,5 +109,138 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 @media (min-width: 1024px) {
   .pg-grid {
     grid-template-columns: repeat(var(--pg-cols, 4), minmax(0, 1fr));
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   PREMIUM MOTION & SURFACE SYSTEM  (additive — nothing above is altered)
+   Animates transform/opacity only · GPU-friendly · reduced-motion aware
+   ════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Refined easing curves for a premium, weighted feel */
+  --ease-out-soft:  cubic-bezier(0.16, 1, 0.3, 1);    /* decisive settle */
+  --ease-out-back:  cubic-bezier(0.34, 1.4, 0.64, 1); /* gentle overshoot */
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Premium layered shadows (soft + tinted, not muddy black) */
+  --shadow-soft:    0 1px 2px rgba(15,15,15,0.04), 0 4px 12px rgba(15,15,15,0.05);
+  --shadow-premium: 0 2px 6px rgba(15,15,15,0.05), 0 14px 30px -10px rgba(15,15,15,0.14);
+  --shadow-float:   0 6px 14px rgba(15,15,15,0.07), 0 26px 50px -16px rgba(15,15,15,0.22);
+}
+
+/* ── Scroll-reveal: hidden until .is-visible is added by the IO hook ──────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.7s var(--ease-out-soft), transform 0.7s var(--ease-out-soft);
+  will-change: opacity, transform;
+}
+.reveal-left  { opacity: 0; transform: translateX(-28px); transition: opacity 0.7s var(--ease-out-soft), transform 0.7s var(--ease-out-soft); }
+.reveal-right { opacity: 0; transform: translateX( 28px); transition: opacity 0.7s var(--ease-out-soft), transform 0.7s var(--ease-out-soft); }
+.reveal-scale { opacity: 0; transform: scale(0.96);       transition: opacity 0.7s var(--ease-out-soft), transform 0.7s var(--ease-out-soft); }
+
+.reveal.is-visible,
+.reveal-left.is-visible,
+.reveal-right.is-visible,
+.reveal-scale.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Stagger children once the container is visible */
+.reveal-stagger > * {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s var(--ease-out-soft), transform 0.6s var(--ease-out-soft);
+}
+.reveal-stagger.is-visible > * { opacity: 1; transform: none; }
+.reveal-stagger.is-visible > *:nth-child(1) { transition-delay: 0.00s; }
+.reveal-stagger.is-visible > *:nth-child(2) { transition-delay: 0.06s; }
+.reveal-stagger.is-visible > *:nth-child(3) { transition-delay: 0.12s; }
+.reveal-stagger.is-visible > *:nth-child(4) { transition-delay: 0.18s; }
+.reveal-stagger.is-visible > *:nth-child(5) { transition-delay: 0.24s; }
+.reveal-stagger.is-visible > *:nth-child(6) { transition-delay: 0.30s; }
+.reveal-stagger.is-visible > *:nth-child(7) { transition-delay: 0.36s; }
+.reveal-stagger.is-visible > *:nth-child(8) { transition-delay: 0.42s; }
+
+/* ── Premium surface utilities ────────────────────────────────────────────── */
+.shadow-soft    { box-shadow: var(--shadow-soft); }
+.shadow-premium { box-shadow: var(--shadow-premium); }
+.shadow-float   { box-shadow: var(--shadow-float); }
+
+.glass {
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+}
+.glass-dark {
+  background: rgba(15,15,15,0.55);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+}
+
+.text-gradient {
+  background: linear-gradient(120deg, var(--color-ink) 0%, var(--color-accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── New keyframes (transform/opacity only) ───────────────────────────────── */
+@keyframes floatY     { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes pulseGlow  { 0%,100% { box-shadow: 0 0 0 0 rgba(192,57,43,0.45); } 50% { box-shadow: 0 0 0 10px rgba(192,57,43,0); } }
+@keyframes kenburns   { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+@keyframes shineSweep { 0% { transform: translateX(-120%) skewX(-20deg); } 100% { transform: translateX(220%) skewX(-20deg); } }
+@keyframes fadeUpHero { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
+
+.animate-float      { animation: floatY 6s var(--ease-in-out-soft) infinite; }
+.animate-pulse-glow { animation: pulseGlow 2.4s ease-in-out infinite; }
+.animate-kenburns   { animation: kenburns 14s ease-out forwards; }
+.hero-rise          { animation: fadeUpHero 0.8s var(--ease-out-soft) both; }
+.hero-rise-1 { animation-delay: 0.05s; }
+.hero-rise-2 { animation-delay: 0.15s; }
+.hero-rise-3 { animation-delay: 0.25s; }
+.hero-rise-4 { animation-delay: 0.35s; }
+
+/* Shine sweep — apply .shine to a relatively-positioned element; sweeps on group/self hover */
+.shine { position: relative; overflow: hidden; }
+.shine::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 60%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: translateX(-120%) skewX(-20deg);
+  pointer-events: none;
+}
+.shine:hover::after,
+.group:hover .shine::after { animation: shineSweep 0.85s var(--ease-out-soft); }
+
+/* Smooth, lifted press feedback for interactive surfaces */
+.press { transition: transform 0.18s var(--ease-out-soft); }
+.press:active { transform: scale(0.97); }
+
+/* Count-badge pop */
+@keyframes badgePop { 0% { transform: scale(0); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.animate-badge-pop { animation: badgePop 0.32s var(--ease-out-back) both; }
+
+/* Right-side drawer slide-in (cart) */
+@keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.animate-drawer-in { animation: drawerIn 0.38s var(--ease-out-soft) both; }
+
+/* ── Accessibility: honour reduced-motion globally ───────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Guarantee revealed content is always shown even without JS/observer */
+  .reveal, .reveal-left, .reveal-right, .reveal-scale,
+  .reveal-stagger > * {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

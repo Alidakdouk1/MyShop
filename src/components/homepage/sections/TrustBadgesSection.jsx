@@ -1,3 +1,5 @@
+import Reveal from '../../common/Reveal'
+
 export default function TrustBadgesSection({ data = {} }) {
   const badges = data.badges || []
   const cols   = data.cols   || 4
@@ -11,10 +13,12 @@ export default function TrustBadgesSection({ data = {} }) {
       style={data.bg_color ? { background: data.bg_color } : { background: 'var(--color-surface-alt)' }}
     >
       <div className="max-w-screen-xl mx-auto px-4">
-        <div className={`grid ${gridCls} gap-6`}>
+        <Reveal variant="stagger" className={`grid ${gridCls} gap-6`}>
           {badges.map((b, i) => (
-            <div key={i} className="flex items-start gap-4">
-              <span className="text-3xl">{b.icon}</span>
+            <div key={i} className="flex items-start gap-4 group">
+              <span className="text-3xl transition-transform duration-300 ease-(--ease-out-back) group-hover:scale-110 group-hover:-rotate-6">
+                {b.icon}
+              </span>
               <div>
                 <p
                   className="font-bold text-sm"
@@ -26,7 +30,7 @@ export default function TrustBadgesSection({ data = {} }) {
               </div>
             </div>
           ))}
-        </div>
+        </Reveal>
       </div>
     </section>
   )

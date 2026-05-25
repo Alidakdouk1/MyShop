@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import Reveal from '../../common/Reveal'
 
 const SIZE_MAP = { sm: 56, md: 76, lg: 96, xl: 112 }
 
@@ -25,7 +26,7 @@ export default function CategoryCirclesSection({ data = {}, categories = [] }) {
     const bannerH = Math.round(sizePx * 1.6)
     const bannerW = Math.round(sizePx * 2.4)
     return (
-      <div className="max-w-screen-xl mx-auto px-4 py-8">
+      <Reveal className="max-w-screen-xl mx-auto px-4 py-8">
         <div
           className="cat-banner-row flex items-start gap-4 overflow-x-auto pb-2"
           style={{ scrollbarWidth: 'none' }}
@@ -39,14 +40,14 @@ export default function CategoryCirclesSection({ data = {}, categories = [] }) {
               style={{ width: bannerW }}
             >
               <div
-                className="bg-surface-alt overflow-hidden flex items-center justify-center shadow-sm border-2 border-transparent group-hover:border-ink/20 transition-all"
+                className="bg-surface-alt overflow-hidden flex items-center justify-center shadow-sm border-2 border-transparent group-hover:border-ink/20 group-hover:shadow-premium group-hover:-translate-y-1 transition-all duration-300 ease-(--ease-out-soft)"
                 style={{ width: bannerW, height: bannerH, borderRadius: '12px' }}
               >
                 {cat.image_url ? (
                   <img
                     src={cat.image_url.startsWith('http') ? cat.image_url : `/MyShop/backend/${cat.image_url}`}
                     alt={cat.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-(--ease-out-soft)"
                   />
                 ) : (
                   <span style={{ fontSize: bannerH * 0.42 }}>🛍️</span>
@@ -61,7 +62,7 @@ export default function CategoryCirclesSection({ data = {}, categories = [] }) {
             </Link>
           ))}
         </div>
-      </div>
+      </Reveal>
     )
   }
 
@@ -75,7 +76,7 @@ export default function CategoryCirclesSection({ data = {}, categories = [] }) {
   const cols       = isScroll ? cats.length : Math.ceil(cats.length / rows)
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8">
+    <Reveal className="max-w-screen-xl mx-auto px-4 py-8">
       <div
         className={isScroll ? 'flex items-start gap-4 overflow-x-auto pb-2' : 'grid gap-4 justify-center'}
         style={{
@@ -91,14 +92,14 @@ export default function CategoryCirclesSection({ data = {}, categories = [] }) {
             style={{ width: itemWidth }}
           >
             <div
-              className={`bg-surface-alt transition-all overflow-hidden flex items-center justify-center shadow-sm ${isClipPath ? '' : 'border-2 border-transparent group-hover:border-ink/20'}`}
+              className={`bg-surface-alt overflow-hidden flex items-center justify-center shadow-sm transition-all duration-300 ease-(--ease-out-soft) group-hover:-translate-y-1 group-hover:shadow-premium ${isClipPath ? '' : 'border-2 border-transparent group-hover:border-ink/20'}`}
               style={{ width: sizePx, height: sizePx, ...shapeStyle }}
             >
               {cat.image_url ? (
                 <img
                   src={cat.image_url.startsWith('http') ? cat.image_url : `/MyShop/backend/${cat.image_url}`}
                   alt={cat.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-500 ease-(--ease-out-soft) group-hover:scale-110"
                 />
               ) : (
                 <span style={{ fontSize: sizePx * 0.42 }}>🛍️</span>
@@ -113,6 +114,6 @@ export default function CategoryCirclesSection({ data = {}, categories = [] }) {
           </Link>
         ))}
       </div>
-    </div>
+    </Reveal>
   )
 }

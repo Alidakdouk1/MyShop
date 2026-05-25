@@ -1,20 +1,22 @@
 import { Link } from 'react-router-dom'
 import ProductGrid from '../../product/ProductGrid'
+import Reveal from '../../common/Reveal'
 
 function SectionHeader({ title, subtitle, to, label }) {
   return (
-    <div className="flex items-end justify-between mb-6">
+    <Reveal className="flex items-end justify-between mb-6">
       <div>
         <h2 className="hero-display text-4xl text-ink tracking-wide">{title}</h2>
-        {subtitle && <p className="text-sm text-ink-secondary mt-1">{subtitle}</p>}
+        <span className="block mt-2 h-1 w-12 rounded-full bg-accent/80" aria-hidden="true" />
+        {subtitle && <p className="text-sm text-ink-secondary mt-2">{subtitle}</p>}
       </div>
       {to && (
-        <Link to={to} className="text-sm font-bold text-ink hover:text-accent transition-colors flex items-center gap-1 group">
+        <Link to={to} className="text-sm font-bold text-ink hover:text-accent transition-colors flex items-center gap-1 group shrink-0">
           {label || 'View all'}
-          <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+          <span className="group-hover:translate-x-1 transition-transform duration-300 ease-(--ease-out-soft)">→</span>
         </Link>
       )}
-    </div>
+    </Reveal>
   )
 }
 
