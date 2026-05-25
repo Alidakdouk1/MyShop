@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getOrders } from '../../api/orderApi'
+import { resolveImg } from '../../lib/img'
 import Spinner from '../../components/ui/Spinner'
 import Pagination from '../../components/common/Pagination'
 
@@ -139,7 +140,7 @@ export default function Orders() {
                         <div key={i} className="w-16 h-16 rounded-xl overflow-hidden shrink-0 border"
                           style={{ borderColor: 'rgba(0,0,0,0.07)', background: '#F0EEE9' }}>
                           <img
-                            src={`/MyShop/backend/${src}`}
+                            src={resolveImg(src)}
                             alt=""
                             className="w-full h-full object-cover"
                             onError={e => { e.target.style.display = 'none' }}

@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { fetchWishlist, toggleWishlistThunk, selectWishlistItems } from '../../store/slices/wishlistSlice'
 import { addToCartThunk } from '../../store/slices/cartSlice'
 import { useToast } from '../../hooks/useToast'
+import { resolveImg } from '../../lib/img'
 import Badge from '../../components/ui/Badge'
 
 export default function Wishlist() {
@@ -41,7 +42,7 @@ export default function Wishlist() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {items.map(item => {
             const img      = item.image
-              ? `/MyShop/backend/${item.image}`
+              ? resolveImg(item.image)
               : `https://placehold.co/300x300/F2F0EB/9C9894?text=P`
             const price    = Number(item.sale_price || item.base_price)
             const original = Number(item.base_price)

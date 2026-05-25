@@ -5,6 +5,7 @@ import {
   updateCartItemThunk, removeCartItemThunk, clearCartThunk,
 } from '../store/slices/cartSlice'
 import { selectUser } from '../store/slices/authSlice'
+import { resolveImg } from '../lib/img'
 import Button from '../components/ui/Button'
 
 export default function Cart() {
@@ -32,7 +33,7 @@ export default function Cart() {
         <div className="lg:col-span-2 space-y-4">
           {items.map(item => {
             const img = item.main_image
-              ? `/MyShop/backend/${item.main_image}`
+              ? resolveImg(item.main_image)
               : `https://placehold.co/100x100/F2F0EB/9C9894?text=P`
             return (
               <div key={item.id} className="flex gap-4 bg-surface rounded-2xl p-4 border border-border">

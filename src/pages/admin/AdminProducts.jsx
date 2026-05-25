@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getAdminProducts, adminDeleteProduct, exportProductsCsv, importProductsCsv } from '../../api/adminApi'
 import { getCategoriesFlat } from '../../api/productApi'
+import { resolveImg } from '../../lib/img'
 import { useToast } from '../../hooks/useToast'
 import Spinner from '../../components/ui/Spinner'
 import Pagination from '../../components/common/Pagination'
@@ -276,7 +277,7 @@ export default function AdminProducts() {
               </thead>
               <tbody>
                 {products.map((p, i) => {
-                  const img   = p.primary_image ? `/MyShop/backend/${p.primary_image}` : null
+                  const img   = p.primary_image ? resolveImg(p.primary_image) : null
                   const price = Number(p.sale_price || p.base_price || 0)
                   const ss    = STATUS_STYLE[p.status] || STATUS_STYLE.active
                   return (
@@ -360,7 +361,7 @@ export default function AdminProducts() {
         /* ── GRID VIEW ── */
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-4">
           {products.map(p => {
-            const img   = p.primary_image ? `/MyShop/backend/${p.primary_image}` : null
+            const img   = p.primary_image ? resolveImg(p.primary_image) : null
             const price = Number(p.sale_price || p.base_price || 0)
             const ss    = STATUS_STYLE[p.status] || STATUS_STYLE.active
             return (

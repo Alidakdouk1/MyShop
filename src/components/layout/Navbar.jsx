@@ -9,6 +9,7 @@ import { removeCartItemThunk, updateCartItemThunk } from '../../store/slices/car
 import { useAuth } from '../../hooks/useAuth'
 import { getHomepageSettings } from '../../api/adminApi'
 import { getProducts } from '../../api/productApi'
+import { resolveImg } from '../../lib/img'
 
 const DEFAULT_ANNOUNCE = [
   { icon: '🚚', text: 'Free Shipping',  show_icon: true },
@@ -523,7 +524,7 @@ function CartDrawer() {
             </div>
           ) : cartItems.map(item => {
             const imgSrc = item.main_image
-              ? `/MyShop/backend/${item.main_image}`
+              ? resolveImg(item.main_image)
               : `https://placehold.co/80x80/F2F0EB/9C9894?text=P`
             return (
               <div key={item.id} className="flex gap-3">

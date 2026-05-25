@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { getOrder, cancelOrder, getReturns, createReturn } from '../../api/orderApi'
 import { useToast } from '../../hooks/useToast'
+import { resolveImg } from '../../lib/img'
 import Spinner from '../../components/ui/Spinner'
 
 const RETURN_STATUS = {
@@ -314,7 +315,7 @@ export default function OrderDetail() {
         <div className="divide-y" style={{ divideColor: 'rgba(0,0,0,0.05)' }}>
           {(order.items || []).map((item, i) => {
             const img = item.image
-              ? `/MyShop/backend/${item.image}`
+              ? resolveImg(item.image)
               : null
 
             return (

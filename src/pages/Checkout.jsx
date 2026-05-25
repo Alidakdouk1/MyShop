@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { selectCartItems, selectCartTotal, clearCartThunk } from '../store/slices/cartSlice'
 import { checkout, validateCoupon } from '../api/orderApi'
 import { computeTotals } from '../lib/storeConfig'
+import { resolveImg } from '../lib/img'
 import { useToast } from '../hooks/useToast'
 import Input from '../components/ui/Input'
 import Button from '../components/ui/Button'
@@ -185,7 +186,7 @@ export default function Checkout() {
             <h2 className="font-bold text-ink">Order Summary</h2>
             <div className="space-y-3 max-h-60 overflow-y-auto">
               {items.map(i => {
-                const img = i.main_image ? `/MyShop/backend/${i.main_image}` : `https://placehold.co/60x60/F2F0EB/9C9894?text=P`
+                const img = i.main_image ? resolveImg(i.main_image) : `https://placehold.co/60x60/F2F0EB/9C9894?text=P`
                 return (
                   <div key={i.id} className="flex gap-3">
                     <img src={img} alt={i.name} className="w-12 h-12 object-cover rounded-lg bg-surface-alt" />
