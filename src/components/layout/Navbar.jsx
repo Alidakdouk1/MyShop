@@ -459,6 +459,27 @@ function CartDrawer() {
   const cartOpen  = useSelector(state => state.ui.cartOpen)
   const cartItems = useSelector(state => state.cart.items)
   const total     = useSelector(state => state.cart.items.reduce((n, i) => n + parseFloat(i.price) * i.quantity, 0))
+  const [dragX, setDragX] = useState(0)
+  const startX    = useRef(0)
+  const startY    = useRef(0)
+  const dragging  = useRef(false)
+
+  const onTouchStart = (e) => {
+    startX.current = e.touches[0].clientX
+    startY.current = e.touches[0].clientY
+    dragging.current = false
+  }
+  const onTouchMove = (e) => {
+    const dx = e.touches[0].clientX - startX.current
+    const dy = e.touches[0].clientY - startY.current
+    if (!dragging.current && Math.abs(dx) > Math.abs(dy) + 4) dragging.current = true
+    if (dragging.current && dx > 0) setDragX(dx)
+  }
+  const onTouchEnd = () => {
+    if (dragX > 90) dispatch(toggleCart())   // swiped far enough → close
+    setDragX(0)
+    dragging.current = false
+  }
 
   if (!cartOpen) return null
 

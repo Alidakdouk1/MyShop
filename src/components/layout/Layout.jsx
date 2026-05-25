@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import Navbar from './Navbar'
 import Footer from './Footer'
+import BottomNav from './BottomNav'
 import ToastContainer from '../ui/Toast'
 
 // Shared header state so sticky sub-bars (e.g. the Shop category bar) can
@@ -43,10 +44,13 @@ export default function Layout({ children }) {
 
   return (
     <HeaderUIContext.Provider value={{ hidden, headerHeight }}>
-      <div className="min-h-screen flex flex-col bg-bg">
+      <div className="min-h-dvh flex flex-col bg-bg">
         <Navbar headerRef={headerRef} hidden={hidden} />
         <main className="flex-1">{children}</main>
         <Footer />
+        {/* Spacer so page content clears the fixed mobile bottom nav */}
+        <div className="h-[68px] md:hidden" aria-hidden="true" />
+        <BottomNav />
         <ToastContainer />
       </div>
     </HeaderUIContext.Provider>
