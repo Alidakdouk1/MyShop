@@ -207,6 +207,36 @@ class ProductModel extends BaseModel
         return $this->query("UPDATE products SET " . implode(', ', $sets) . " WHERE id = ?", $params)->rowCount() > 0;
     }
 
+    // ── Stock control (atomic / race-safe) ─────────────────────────────────────
+    // The conditional "AND stock_qty >= ?" makes the decrement reject overselling
+    // at the database level even under concurrent checkouts. Returns false when
+    // there isn't enough stock (caller should roll back the order).
+    public function decrementStock(int $productId, int $qty): bool
+    {
+        return $this->query(
+            "UPDATE products SET stock_qty = stock_qty - ? WHERE id = ? AND stock_qty >= ?",
+            [$qty, $productId, $qty]
+        )->rowCount() > 0;
+    }
+
+    public function incrementStock(int $productId, int $qty): void
+    {
+        $this->query("UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?", [$qty, $productId]);
+    }
+
+    public function decrementVariantStock(int $variantId, int $qty): bool
+    {
+        return $this->query(
+            "UPDATE product_variants SET stock_qty = stock_qty - ? WHERE id = ? AND stock_qty >= ?",
+            [$qty, $variantId, $qty]
+        )->rowCount() > 0;
+    }
+
+    public function incrementVariantStock(int $variantId, int $qty): void
+    {
+        $this->query("UPDATE product_variants SET stock_qty = stock_qty + ? WHERE id = ?", [$qty, $variantId]);
+    }
+
     public function addImage(int $productId, string $url, int $sort = 0, bool $primary = false): int
     {
         if ($primary) {

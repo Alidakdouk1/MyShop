@@ -47,38 +47,80 @@ class OrderController
         $method      = in_array($data['payment_method'] ?? '', ['stripe', 'cod'], true)
                        ? $data['payment_method'] : 'cod';
 
-        $orderId = $this->orders->create([
-            'user_id'        => $userId,
-            'address_id'     => (int) ($data['address_id'] ?? 0) ?: null,
-            'coupon_id'      => $couponId,
-            'subtotal'       => $subtotal,
-            'shipping_fee'   => $shippingFee,
-            'discount'       => $discount,
-            'tax'            => $tax,
-            'total'          => $total,
-            'payment_method' => $method,
-            'notes'          => sanitize($data['notes'] ?? ''),
-        ]);
-
         $products = new ProductModel();
-        foreach ($items as $item) {
-            $p = $products->findById((int) $item['product_id']);
-            $this->orders->addItem($orderId, [
-                'product_id'            => (int) $item['product_id'],
-                'variant_id'            => $item['variant_id'] ? (int) $item['variant_id'] : null,
-                'quantity'              => (int) $item['quantity'],
-                'unit_price'            => (float) $item['price_snapshot'],
-                'product_name_snapshot' => $p['name'] ?? $item['name'],
-                'sku_snapshot'          => $p['sku'] ?? null,
+        $filters  = new FilterModel();
+
+        // Everything that touches stock + the order rows runs in one transaction.
+        // If any line can't be reserved we roll the whole order back, so an order
+        // is never created for stock that wasn't actually available.
+        $orderId = 0;
+        $this->orders->begin();
+        try {
+            $orderId = $this->orders->create([
+                'user_id'        => $userId,
+                'address_id'     => (int) ($data['address_id'] ?? 0) ?: null,
+                'coupon_id'      => $couponId,
+                'subtotal'       => $subtotal,
+                'shipping_fee'   => $shippingFee,
+                'discount'       => $discount,
+                'tax'            => $tax,
+                'total'          => $total,
+                'payment_method' => $method,
+                'notes'          => sanitize($data['notes'] ?? ''),
             ]);
-            $products->update((int) $item['product_id'], [
-                'stock_qty' => max(0, (int) $p['stock_qty'] - (int) $item['quantity']),
-            ]);
+
+            foreach ($items as $item) {
+                $pid       = (int) $item['product_id'];
+                $qty       = (int) $item['quantity'];
+                $variantId = $item['variant_id'] ? (int) $item['variant_id'] : null;
+                $optionIds = array_column($item['picked_options'] ?? [], 'option_id');
+                $p         = $products->findById($pid);
+                $name      = $p['name'] ?? $item['name'] ?? 'an item';
+
+                $this->orders->addItem($orderId, [
+                    'product_id'            => $pid,
+                    'variant_id'            => $variantId,
+                    'quantity'              => $qty,
+                    'unit_price'            => (float) $item['price_snapshot'],
+                    'product_name_snapshot' => $name,
+                    'sku_snapshot'          => $p['sku'] ?? null,
+                ], $optionIds);
+
+                // Reserve stock from the right pool — same priority the cart uses:
+                // variant first, then per-option pools, otherwise the base product.
+                if ($variantId) {
+                    if (!$products->decrementVariantStock($variantId, $qty)) {
+                        throw new RuntimeException("Sorry, \"{$name}\" just went out of stock.");
+                    }
+                } elseif (!empty($optionIds)) {
+                    $trackedAny = false;
+                    foreach ($optionIds as $oid) {
+                        $res = $filters->decrementOptionStock($pid, (int) $oid, $qty);
+                        if ($res === 'insufficient') {
+                            throw new RuntimeException("Sorry, \"{$name}\" just went out of stock.");
+                        }
+                        if ($res === 'ok') $trackedAny = true;
+                    }
+                    if ($trackedAny) {
+                        $filters->recomputeProductStock($pid);
+                    } elseif (!$products->decrementStock($pid, $qty)) {
+                        throw new RuntimeException("Sorry, \"{$name}\" just went out of stock.");
+                    }
+                } elseif (!$products->decrementStock($pid, $qty)) {
+                    throw new RuntimeException("Sorry, \"{$name}\" just went out of stock.");
+                }
+            }
+
+            if ($couponId) $this->coupons->incrementUsage($couponId);
+            $this->carts->clear((int) $cart['id']);
+
+            $this->orders->commit();
+        } catch (\Throwable $e) {
+            $this->orders->rollback();
+            error($e->getMessage(), 409);
         }
 
-        if ($couponId) $this->coupons->incrementUsage($couponId);
-        $this->carts->clear((int) $cart['id']);
-
+        // Confirmation side-effects run only after the order is safely committed.
         $order = $this->orders->withItems($orderId);
         $user  = (new UserModel())->findById($userId);
         MailHelper::orderConfirmation($user['email'], $user['name'], $order, $order['items']);
@@ -129,7 +171,7 @@ class OrderController
         if ($elapsed > 5 * 3600) {
             error('Orders can only be cancelled within 5 hours of placing them.', 422);
         }
-        $this->orders->updateStatus($id, 'cancelled');
+        $this->orders->setStatusWithStockSync($id, 'cancelled');
         success(null, 'Order cancelled.');
     }
 

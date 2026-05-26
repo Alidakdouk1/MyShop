@@ -18,6 +18,24 @@ abstract class BaseModel
         return $stmt;
     }
 
+    // ── Transactions ─────────────────────────────────────────────
+    // All models share one PDO (getDB() singleton), so a transaction
+    // started on any model wraps queries run through every model.
+    public function begin(): void
+    {
+        if (!$this->db->inTransaction()) $this->db->beginTransaction();
+    }
+
+    public function commit(): void
+    {
+        if ($this->db->inTransaction()) $this->db->commit();
+    }
+
+    public function rollback(): void
+    {
+        if ($this->db->inTransaction()) $this->db->rollBack();
+    }
+
     public function findById(int $id): ?array
     {
         $row = $this->query("SELECT * FROM `{$this->table}` WHERE id = ?", [$id])->fetch();

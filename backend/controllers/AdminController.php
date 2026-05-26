@@ -543,7 +543,7 @@ class AdminController
         $status  = $data['status'] ?? '';
         $allowed = ['pending','confirmed','shipped','delivered','cancelled','refunded'];
         if (!in_array($status, $allowed, true)) error('Invalid status.', 422);
-        (new OrderModel())->updateStatus($id, $status);
+        (new OrderModel())->setStatusWithStockSync($id, $status);
         success(null, 'Order status updated.');
     }
 

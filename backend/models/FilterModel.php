@@ -313,6 +313,50 @@ class FilterModel extends BaseModel
         return $total;
     }
 
+    /**
+     * Atomically take stock from one picked filter option at checkout.
+     * Returns:
+     *   'ok'          — option tracks stock and was decremented
+     *   'untracked'   — option has no stock pool (NULL quantity), nothing to do
+     *   'insufficient'— option tracks stock but not enough is left (caller rolls back)
+     * The "AND quantity >= ?" guard prevents overselling under concurrent orders.
+     */
+    public function decrementOptionStock(int $productId, int $optionId, int $qty): string
+    {
+        $row = $this->query(
+            "SELECT quantity FROM product_filter_values WHERE product_id = ? AND filter_option_id = ?",
+            [$productId, $optionId]
+        )->fetch();
+        if (!$row || $row['quantity'] === null) return 'untracked';
+
+        $ok = $this->query(
+            "UPDATE product_filter_values SET quantity = quantity - ?
+             WHERE product_id = ? AND filter_option_id = ? AND quantity IS NOT NULL AND quantity >= ?",
+            [$qty, $productId, $optionId, $qty]
+        )->rowCount() > 0;
+        return $ok ? 'ok' : 'insufficient';
+    }
+
+    /** Give option stock back (used when an order is cancelled/refunded). */
+    public function incrementOptionStock(int $productId, int $optionId, int $qty): void
+    {
+        $this->query(
+            "UPDATE product_filter_values SET quantity = quantity + ?
+             WHERE product_id = ? AND filter_option_id = ? AND quantity IS NOT NULL",
+            [$qty, $productId, $optionId]
+        );
+    }
+
+    /** Does this option carry its own stock pool? (NULL quantity = attribute only.) */
+    public function optionTracksStock(int $productId, int $optionId): bool
+    {
+        $row = $this->query(
+            "SELECT quantity FROM product_filter_values WHERE product_id = ? AND filter_option_id = ?",
+            [$productId, $optionId]
+        )->fetch();
+        return $row && $row['quantity'] !== null;
+    }
+
     /** Get a product's current filter selections, grouped by filter. */
     public function forProduct(int $productId): array
     {

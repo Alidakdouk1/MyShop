@@ -22,7 +22,7 @@ class OrderModel extends BaseModel
         return $this->lastId();
     }
 
-    public function addItem(int $orderId, array $item): void
+    public function addItem(int $orderId, array $item, array $optionIds = []): int
     {
         $this->query(
             "INSERT INTO order_items (order_id, product_id, variant_id, quantity,
@@ -35,6 +35,16 @@ class OrderModel extends BaseModel
                 $item['product_name_snapshot'], $item['sku_snapshot'] ?? null,
             ]
         );
+        $orderItemId = $this->lastId();
+
+        // Remember the stock-bearing options so they can be restored on cancel.
+        foreach (array_unique(array_filter(array_map('intval', $optionIds))) as $oid) {
+            $this->query(
+                "INSERT IGNORE INTO order_item_options (order_item_id, filter_option_id) VALUES (?, ?)",
+                [$orderItemId, $oid]
+            );
+        }
+        return $orderItemId;
     }
 
     public function withItems(int $orderId): ?array
@@ -129,6 +139,77 @@ class OrderModel extends BaseModel
     public function updateStatus(int $id, string $status): bool
     {
         return $this->query("UPDATE orders SET status = ? WHERE id = ?", [$status, $id])->rowCount() > 0;
+    }
+
+    /**
+     * Change an order's status and keep stock in sync. When an order first enters
+     * a "released" state (cancelled/refunded) its reserved stock is returned to
+     * the correct pool. Runs in one transaction; the status guard prevents giving
+     * stock back twice (e.g. cancelled -> refunded).
+     */
+    public function setStatusWithStockSync(int $id, string $newStatus): bool
+    {
+        $order = $this->findById($id);
+        if (!$order) return false;
+
+        $released = ['cancelled', 'refunded'];
+        $shouldRestore = in_array($newStatus, $released, true)
+                      && !in_array($order['status'], $released, true);
+
+        $this->begin();
+        try {
+            if ($shouldRestore) $this->restoreStock($id);
+            $this->query("UPDATE orders SET status = ? WHERE id = ?", [$newStatus, $id]);
+            $this->commit();
+        } catch (\Throwable $e) {
+            $this->rollback();
+            throw $e;
+        }
+        return true;
+    }
+
+    /** Return every order line's quantity to its stock pool (variant > options > base). */
+    public function restoreStock(int $orderId): void
+    {
+        $items = $this->query(
+            "SELECT id, product_id, variant_id, quantity FROM order_items WHERE order_id = ?",
+            [$orderId]
+        )->fetchAll();
+
+        $products = new ProductModel();
+        $filters  = new FilterModel();
+
+        foreach ($items as $it) {
+            $pid = (int) $it['product_id'];
+            $qty = (int) $it['quantity'];
+
+            if ($it['variant_id']) {
+                $products->incrementVariantStock((int) $it['variant_id'], $qty);
+                continue;
+            }
+
+            $optionIds = array_map(
+                fn($r) => (int) $r['filter_option_id'],
+                $this->query(
+                    "SELECT filter_option_id FROM order_item_options WHERE order_item_id = ?",
+                    [(int) $it['id']]
+                )->fetchAll()
+            );
+
+            $restoredAnyOption = false;
+            foreach ($optionIds as $oid) {
+                if ($filters->optionTracksStock($pid, $oid)) {
+                    $filters->incrementOptionStock($pid, $oid, $qty);
+                    $restoredAnyOption = true;
+                }
+            }
+
+            if ($restoredAnyOption) {
+                $filters->recomputeProductStock($pid);
+            } else {
+                $products->incrementStock($pid, $qty);
+            }
+        }
     }
 
     public function updatePayment(int $id, string $status, string $intentId): bool
