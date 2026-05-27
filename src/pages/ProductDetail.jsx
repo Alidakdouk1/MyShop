@@ -2,14 +2,18 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { getProduct, getProductReviews, createReview, notifyBackInStock } from '../api/productApi'
+import { getProductQuestions, askQuestion } from '../api/questionApi'
 import { getProductFilters } from '../api/filterApi'
 import { addToCartThunk } from '../store/slices/cartSlice'
 import { toggleWishlistThunk, selectIsWishlisted, selectWishlistItemId } from '../store/slices/wishlistSlice'
 import { selectUser } from '../store/slices/authSlice'
 import { useToast } from '../hooks/useToast'
+import { useCurrency } from '../context/CurrencyContext'
 import StarRating from '../components/common/StarRating'
 import Spinner from '../components/ui/Spinner'
 import ProductCard from '../components/product/ProductCard'
+import FrequentlyBoughtTogether from '../components/product/FrequentlyBoughtTogether'
+import FlashCountdown from '../components/product/FlashCountdown'
 import Seo from '../components/common/Seo'
 import { getRecentlyViewed, addRecentlyViewed } from '../lib/recentlyViewed'
 
@@ -81,6 +85,7 @@ export default function ProductDetail() {
   const dispatch    = useDispatch()
   const navigate    = useNavigate()
   const toast       = useToast()
+  const { format }  = useCurrency()
   const user        = useSelector(selectUser)
   const [product, setProduct]     = useState(null)
   const [reviews, setReviews]     = useState([])
@@ -91,13 +96,18 @@ export default function ProductDetail() {
   const [selectedVariant, setSelectedVariant] = useState(null)
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [questions, setQuestions]   = useState([])
+  const [qText, setQText]           = useState('')
+  const [qSubmitting, setQSubmitting] = useState(false)
   const [notifyEmail, setNotifyEmail] = useState('')
   const [notifySent, setNotifySent]   = useState(false)
   const [tab, setTab]             = useState('description')
   const [related, setRelated]     = useState([])
+  const [boughtTogether, setBoughtTogether] = useState([])
   const [recentlyViewed, setRecentlyViewed] = useState([])
   const [zoom, setZoom]           = useState({ on: false, x: 50, y: 50 })
   const [imgLoaded, setImgLoaded] = useState(false)
+  const [flashExpired, setFlashExpired] = useState(false)
   const [productFilters, setProductFilters] = useState([])
   const [pickedFilters, setPickedFilters]   = useState({}) // { [filter_id]: optionId }
   const tabsRef = useRef(null)
@@ -108,9 +118,13 @@ export default function ProductDetail() {
   useEffect(() => {
     setLoading(true)
     setRelated([])
+    setBoughtTogether([])
     setImgLoaded(false)
     setProductFilters([])
     setPickedFilters({})
+    setQuestions([])
+    setQText('')
+    setFlashExpired(false)
     // Show items viewed *before* this one, then record the current product.
     setRecentlyViewed(getRecentlyViewed().filter(rp => rp.slug !== slug).slice(0, 6))
     getProduct(slug).then(r => {
@@ -122,11 +136,13 @@ export default function ProductDetail() {
       setSelectedVariant((p.variants && p.variants.length > 0) ? p.variants[0] : null)
       if (p?.id) {
         getProductReviews(p.id).then(r2 => setReviews(r2.data.data || []))
+        getProductQuestions(p.id).then(rq => setQuestions(rq.data.data || [])).catch(() => setQuestions([]))
         getProductFilters(p.id)
           .then(r3 => setProductFilters(r3.data.data || []))
           .catch(() => setProductFilters([]))
       }
       setRelated(Array.isArray(p.related) ? p.related : [])
+      setBoughtTogether(Array.isArray(p.bought_together) ? p.bought_together : [])
       addRecentlyViewed(p)
     }).catch(() => navigate('/not-found', { replace: true }))
       .finally(() => setLoading(false))
@@ -180,9 +196,12 @@ export default function ProductDetail() {
   const priceModifier  = selectedVariant ? Number(selectedVariant.price_modifier || 0) : 0
   const basePrice      = Number(product.base_price || 0)
   const salePriceBase  = product.sale_price ? Number(product.sale_price) : null
-  const effectivePrice = (salePriceBase ?? basePrice) + priceModifier
-  const discount = salePriceBase && salePriceBase < basePrice
-    ? Math.round((1 - salePriceBase / basePrice) * 100) : null
+  const flash          = (product.flash_sale && !flashExpired) ? product.flash_sale : null
+  const flashBase      = flash ? Number(flash.flash_price) : null
+  const effectiveBase  = flashBase ?? (salePriceBase ?? basePrice)
+  const effectivePrice = effectiveBase + priceModifier
+  const discount = effectiveBase < basePrice
+    ? Math.round((1 - effectiveBase / basePrice) * 100) : null
 
   const images = (product.images || []).map(i => i.image_url || i).filter(Boolean)
 
@@ -253,6 +272,22 @@ export default function ProductDetail() {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit review')
     } finally { setSubmitting(false) }
+  }
+
+  const handleAskQuestion = async (e) => {
+    e.preventDefault()
+    if (!user) { toast.info('Login to ask a question'); navigate('/login'); return }
+    if (qText.trim().length < 5) { toast.error('Please enter a question (at least 5 characters)'); return }
+    setQSubmitting(true)
+    try {
+      await askQuestion(product.id, qText.trim())
+      toast.success('Question submitted! We’ll answer it soon.')
+      setQText('')
+      const r = await getProductQuestions(product.id)
+      setQuestions(r.data.data || [])
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not submit question')
+    } finally { setQSubmitting(false) }
   }
 
   const absImg = (src) => !src ? undefined : (src.startsWith('http') ? src : `${window.location.origin}/MyShop/backend/${src}`)
@@ -454,14 +489,36 @@ export default function ProductDetail() {
             {/* Thin rule */}
             <div style={{ height: '1px', background: '#E4E1D9', margin: '20px 0' }} />
 
+            {/* Flash sale banner */}
+            {flash && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                background: 'linear-gradient(90deg, #C0392B 0%, #9B2D22 100%)',
+                borderRadius: 14, padding: '14px 18px', marginBottom: '20px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <svg style={{ width: 22, height: 22, color: '#fff' }} fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M11 3a1 1 0 00-1.7-.7L3.3 9.3a1 1 0 00.7 1.7H8v6a1 1 0 001.7.7l6-7a1 1 0 00-.7-1.7H11V3z" />
+                  </svg>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#fff' }}>
+                      Flash Sale · −{flash.discount_percent}%
+                    </p>
+                    <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>{flash.title}</p>
+                  </div>
+                </div>
+                <FlashCountdown endsAt={flash.ends_at} variant="boxed" onExpire={() => setFlashExpired(true)} />
+              </div>
+            )}
+
             {/* Price */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
               <span style={{ fontSize: '2rem', fontWeight: 700, color: '#0F0F0F', letterSpacing: '-0.02em' }}>
-                ${Number(effectivePrice).toFixed(2)}
+                {format(effectivePrice)}
               </span>
               {discount && (
                 <span style={{ fontSize: '1.1rem', color: '#9C9894', textDecoration: 'line-through' }}>
-                  ${Number(basePrice).toFixed(2)}
+                  {format(basePrice)}
                 </span>
               )}
               {discount && (
@@ -518,8 +575,8 @@ export default function ProductDetail() {
                         {Number(v.price_modifier) !== 0 && (
                           <span style={{ fontSize: '11px', opacity: 0.7, marginLeft: '4px' }}>
                             {Number(v.price_modifier) > 0
-                              ? `+$${Number(v.price_modifier).toFixed(2)}`
-                              : `-$${Math.abs(Number(v.price_modifier)).toFixed(2)}`}
+                              ? `+${format(v.price_modifier)}`
+                              : `-${format(Math.abs(Number(v.price_modifier)))}`}
                           </span>
                         )}
                       </button>
@@ -816,30 +873,41 @@ export default function ProductDetail() {
         </div>
       </div>
 
+      {/* ── Frequently Bought Together ────────────────────── */}
+      <FrequentlyBoughtTogether
+        current={product}
+        items={boughtTogether}
+        currentAddable={!hasVariants && visibleFilters.length === 0 && Number(product.stock_qty || 0) > 0}
+      />
+
       {/* ── Tabs ──────────────────────────────────────────── */}
       <div ref={tabsRef} style={{
         maxWidth: '1280px', margin: '40px auto 0',
         padding: '0 20px', borderBottom: '1px solid #E4E1D9',
       }}>
         <div style={{ display: 'flex', gap: '40px' }}>
-          {['description', 'reviews'].map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                paddingBottom: '14px',
-                fontSize: '12px', fontWeight: 700,
-                letterSpacing: '0.12em', textTransform: 'uppercase',
-                color: tab === t ? '#0F0F0F' : '#9C9894',
-                border: 'none', borderBottom: tab === t ? '2px solid #0F0F0F' : '2px solid transparent',
-                background: 'none', cursor: 'pointer',
-                marginBottom: '-1px',
-                transition: 'color 0.2s, border-color 0.2s',
-              }}
-            >
-              {t}{t === 'reviews' && reviews.length > 0 ? ` (${reviews.length})` : ''}
-            </button>
-          ))}
+          {['description', 'reviews', 'qa'].map(t => {
+            const label = t === 'qa' ? 'Q&A' : t
+            const count = t === 'reviews' ? reviews.length : t === 'qa' ? questions.length : 0
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                style={{
+                  paddingBottom: '14px',
+                  fontSize: '12px', fontWeight: 700,
+                  letterSpacing: '0.12em', textTransform: 'uppercase',
+                  color: tab === t ? '#0F0F0F' : '#9C9894',
+                  border: 'none', borderBottom: tab === t ? '2px solid #0F0F0F' : '2px solid transparent',
+                  background: 'none', cursor: 'pointer',
+                  marginBottom: '-1px',
+                  transition: 'color 0.2s, border-color 0.2s',
+                }}
+              >
+                {label}{count > 0 ? ` (${count})` : ''}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -950,6 +1018,107 @@ export default function ProductDetail() {
                 </button>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Q&A Tab ───────────────────────────────────────── */}
+      {tab === 'qa' && (
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '40px 20px 0' }}>
+          <div style={{ maxWidth: '720px' }}>
+
+            {/* Ask a question */}
+            <div style={{ padding: '24px', background: '#F2F0EB', borderRadius: '20px', marginBottom: '28px' }}>
+              <h3 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.5rem', fontWeight: 400, color: '#0F0F0F', margin: '0 0 6px' }}>
+                Have a question?
+              </h3>
+              <p style={{ fontSize: '13px', color: '#9C9894', margin: '0 0 16px' }}>
+                Ask anything about this product — we’ll answer it here for everyone.
+              </p>
+              <form onSubmit={handleAskQuestion}>
+                <textarea
+                  value={qText}
+                  onChange={e => setQText(e.target.value)}
+                  placeholder={user ? 'Type your question…' : 'Log in to ask a question'}
+                  rows={3}
+                  required
+                  style={{
+                    width: '100%', border: '1.5px solid #E4E1D9', borderRadius: '12px',
+                    padding: '14px 16px', fontSize: '14px', color: '#0F0F0F',
+                    background: '#fff', resize: 'none', outline: 'none',
+                    fontFamily: "'Figtree', sans-serif", boxSizing: 'border-box', marginBottom: '12px',
+                    transition: 'border-color 0.2s',
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#0F0F0F'}
+                  onBlur={e => e.target.style.borderColor = '#E4E1D9'}
+                />
+                <button
+                  type="submit"
+                  disabled={qSubmitting}
+                  style={{
+                    height: '46px', padding: '0 28px',
+                    background: '#0F0F0F', color: '#fff', border: 'none', borderRadius: '12px',
+                    fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                    cursor: qSubmitting ? 'not-allowed' : 'pointer', opacity: qSubmitting ? 0.6 : 1,
+                    transition: 'opacity 0.2s',
+                  }}
+                >
+                  {qSubmitting ? 'Submitting…' : 'Ask Question'}
+                </button>
+              </form>
+            </div>
+
+            {/* Questions list */}
+            {questions.length === 0 ? (
+              <p style={{ color: '#9C9894', fontSize: '14px' }}>No questions yet. Be the first to ask!</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                {questions.map((q, i) => (
+                  <div key={q.id} style={{ padding: '20px 0', borderBottom: i < questions.length - 1 ? '1px solid #E4E1D9' : 'none' }}>
+                    {/* Question */}
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <span style={{
+                        width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0,
+                        background: '#0F0F0F', color: '#fff', fontSize: '12px', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>Q</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '14px', color: '#0F0F0F', fontWeight: 600, lineHeight: 1.5, margin: 0 }}>{q.question}</p>
+                        <p style={{ fontSize: '11px', color: '#C8C4BC', marginTop: '4px' }}>
+                          {q.asker_name} · {new Date(q.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Answer */}
+                    {q.answer ? (
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '12px', marginLeft: '0' }}>
+                        <span style={{
+                          width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0,
+                          background: '#C0392B', color: '#fff', fontSize: '12px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>A</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '14px', color: '#5C5854', lineHeight: 1.6, margin: 0 }}>{q.answer}</p>
+                          <p style={{ fontSize: '11px', color: '#C8C4BC', marginTop: '4px' }}>
+                            <span style={{ fontWeight: 700, color: '#9C9894', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Store</span>
+                            {q.answered_at ? ` · ${new Date(q.answered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{
+                        marginTop: '10px', marginLeft: '36px', display: 'inline-block',
+                        fontSize: '11px', fontWeight: 600, color: '#B8922E',
+                        background: '#FFFBEB', padding: '4px 10px', borderRadius: '6px',
+                      }}>
+                        Awaiting an answer
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

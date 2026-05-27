@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { useAuth } from '../../hooks/useAuth'
 import { selectUser } from '../../store/slices/authSlice'
 import Input from '../../components/ui/Input'
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton'
 
 /* ── decorative left panel ─────────────────────────────────────────── */
 function LeftPanel() {
@@ -192,6 +193,8 @@ export default function Register() {
               </button>
             </div>
           </form>
+
+          <GoogleSignInButton redirectTo="/" />
 
           {/* divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '1.5rem 0' }}>

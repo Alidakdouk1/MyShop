@@ -8,8 +8,11 @@ import { toggleCart, toggleMobileMenu, setMobileMenu, selectMobileMenuOpen } fro
 import { removeCartItemThunk, updateCartItemThunk } from '../../store/slices/cartSlice'
 import { useAuth } from '../../hooks/useAuth'
 import { getHomepageSettings } from '../../api/adminApi'
-import { getProducts } from '../../api/productApi'
 import { resolveImg } from '../../lib/img'
+import SearchBar from './SearchBar'
+import MobileSearchOverlay from './MobileSearchOverlay'
+import CurrencyPicker from './CurrencyPicker'
+import { useCurrency } from '../../context/CurrencyContext'
 
 const DEFAULT_ANNOUNCE = [
   { icon: '🚚', text: 'Free Shipping',  show_icon: true },
@@ -145,20 +148,16 @@ const NAV_LINKS = [
 
 export default function Navbar({ headerRef, hidden = false }) {
   const dispatch    = useDispatch()
-  const navigate    = useNavigate()
   const location    = useLocation()
   const { logout }  = useAuth()
   const user        = useSelector(selectUser)
   const cartCount   = useSelector(selectCartCount)
   const wishCount   = useSelector(selectWishlistItems).length
   const mobileOpen  = useSelector(selectMobileMenuOpen)
-  const [search, setSearch]         = useState('')
   const [userMenuOpen, setUserMenu] = useState(false)
   const [scrolled, setScrolled]     = useState(false)
-  const [results, setResults]       = useState([])
-  const [showResults, setShowResults] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const userMenuRef = useRef(null)
-  const searchRef   = useRef(null)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -173,32 +172,6 @@ export default function Navbar({ headerRef, hidden = false }) {
   }, [])
 
   useEffect(() => { dispatch(setMobileMenu(false)) }, [location.pathname])
-
-  // Search autocomplete — debounced product suggestions (state set only inside
-  // the async callback; the render is gated on query length so nothing stale shows)
-  useEffect(() => {
-    const q = search.trim()
-    if (q.length < 2) return
-    const t = setTimeout(() => {
-      getProducts({ search: q, limit: 6 })
-        .then(r => { setResults(r.data.data || []); setShowResults(true) })
-        .catch(() => { /* keep previous suggestions on error */ })
-    }, 250)
-    return () => clearTimeout(t)
-  }, [search])
-
-  useEffect(() => {
-    const onClick = (e) => { if (!searchRef.current?.contains(e.target)) setShowResults(false) }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [])
-
-  const handleSearch = (e) => {
-    e.preventDefault()
-    if (search.trim()) { navigate(`/shop?search=${encodeURIComponent(search.trim())}`); setSearch(''); setShowResults(false) }
-  }
-
-  const openResult = (slug) => { navigate(`/products/${slug}`); setSearch(''); setShowResults(false); setResults([]) }
 
   return (
     <>
@@ -248,57 +221,25 @@ export default function Navbar({ headerRef, hidden = false }) {
             </nav>
 
             {/* Search */}
-            <form ref={searchRef} onSubmit={handleSearch} className="flex-1 max-w-md mx-auto hidden sm:block relative">
-              <div className="relative w-full">
-                <input
-                  type="search"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  onFocus={() => { if (results.length) setShowResults(true) }}
-                  placeholder="Search products…"
-                  className="w-full bg-surface-alt border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm
-                    text-ink placeholder-ink-tertiary outline-none
-                    focus:bg-white focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-tertiary"
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-
-              {/* Autocomplete suggestions */}
-              {showResults && search.trim().length >= 2 && results.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-2 bg-surface border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-slide-down">
-                  {results.map(p => {
-                    const raw   = p.primary_image || p.main_image
-                    const img   = raw ? (raw.startsWith('http') ? raw : `/MyShop/backend/${raw}`) : 'https://placehold.co/80x80/F2F0EB/9C9894?text=P'
-                    const price = p.sale_price || p.base_price || p.price || 0
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => openResult(p.slug)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-surface-alt transition-colors text-left"
-                      >
-                        <img src={img} alt="" className="w-10 h-10 rounded-lg object-cover bg-surface-alt shrink-0" />
-                        <span className="flex-1 min-w-0 text-sm font-medium text-ink line-clamp-1">{p.name}</span>
-                        <span className="text-sm font-bold text-ink shrink-0">${Number(price).toFixed(2)}</span>
-                      </button>
-                    )
-                  })}
-                  <button
-                    type="submit"
-                    className="w-full text-center text-xs font-bold text-accent py-2.5 border-t border-border hover:bg-surface-alt transition-colors"
-                  >
-                    See all results for “{search.trim()}”
-                  </button>
-                </div>
-              )}
-            </form>
+            <SearchBar enableShortcut className="flex-1 max-w-md mx-auto hidden sm:block" />
 
             {/* Actions */}
             <div className="flex items-center gap-1 ml-auto">
+              {/* Mobile search trigger — opens full-screen overlay */}
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="sm:hidden p-2.5 rounded-xl hover:bg-surface-alt text-ink transition-all duration-200 active:scale-90"
+                aria-label="Search"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
+
+              {/* Currency */}
+              <CurrencyPicker />
+
               {/* Wishlist */}
               {user && (
                 <Link to="/account/wishlist" className="relative p-2.5 rounded-xl hover:bg-surface-alt transition-all duration-200 hover:-translate-y-0.5 active:scale-90">
@@ -394,16 +335,7 @@ export default function Navbar({ headerRef, hidden = false }) {
         {/* Mobile menu */}
         {mobileOpen && (
           <div className="md:hidden border-t border-border bg-surface animate-slide-down">
-            <form onSubmit={handleSearch} className="px-4 py-3">
-              <input
-                type="search"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search products…"
-                className="w-full bg-surface-alt border border-border rounded-xl px-4 py-2.5 text-sm outline-none"
-              />
-            </form>
-            <nav className="px-2 pb-4 flex flex-col gap-0.5">
+            <nav className="px-2 py-4 flex flex-col gap-0.5">
               {NAV_LINKS.map(l => (
                 <Link key={l.to} to={l.to}
                   className="px-4 py-3 text-sm font-semibold text-ink-secondary hover:text-ink hover:bg-surface-alt rounded-xl transition-colors">
@@ -430,6 +362,9 @@ export default function Navbar({ headerRef, hidden = false }) {
 
       {/* Cart Drawer */}
       <CartDrawer />
+
+      {/* Mobile full-screen search */}
+      <MobileSearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   )
 }
@@ -457,6 +392,7 @@ function MenuLink({ to, onClick, children }) {
 function CartDrawer() {
   const dispatch  = useDispatch()
   const navigate  = useNavigate()
+  const { format } = useCurrency()
   const cartOpen  = useSelector(state => state.ui.cartOpen)
   const cartItems = useSelector(state => state.cart.items)
   const total     = useSelector(state => state.cart.items.reduce((n, i) => n + parseFloat(i.price) * i.quantity, 0))
@@ -535,7 +471,7 @@ function CartDrawer() {
                   <Link to={`/products/${item.slug}`} onClick={() => dispatch(toggleCart())}>
                     <p className="text-sm font-semibold text-ink line-clamp-2 hover:text-accent transition-colors">{item.name}</p>
                   </Link>
-                  <p className="text-sm font-bold text-ink mt-1">${(parseFloat(item.price) * item.quantity).toFixed(2)}</p>
+                  <p className="text-sm font-bold text-ink mt-1">{format(parseFloat(item.price) * item.quantity)}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex items-center border border-border rounded-lg overflow-hidden">
                       <button
@@ -569,13 +505,13 @@ function CartDrawer() {
           <div className="px-6 py-5 border-t border-border space-y-3 pb-safe">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-ink">Subtotal</span>
-              <span className="text-xl font-bold text-ink">${total.toFixed(2)}</span>
+              <span className="text-xl font-bold text-ink">{format(total)}</span>
             </div>
             <button
               onClick={() => { dispatch(toggleCart()); navigate('/checkout') }}
               className="shine w-full bg-ink text-white font-bold py-3.5 rounded-xl hover:bg-ink/80 active:scale-[0.98] transition-all"
             >
-              Checkout · ${total.toFixed(2)}
+              Checkout · {format(total)}
             </button>
             <button
               onClick={() => { dispatch(toggleCart()); navigate('/cart') }}

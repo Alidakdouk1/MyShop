@@ -3,6 +3,7 @@ import api from './axios'
 // Dashboard
 export const getAdminDashboard  = ()          => api.get('/admin/dashboard')
 export const getAbandonedCarts  = (hours)     => api.get('/admin/abandoned-carts', { params: hours ? { hours } : {} })
+export const getAnalytics       = (days = 30) => api.get('/admin/analytics', { params: { days } })
 
 // Users
 export const getAdminUsers     = (params)     => api.get('/admin/users', { params })

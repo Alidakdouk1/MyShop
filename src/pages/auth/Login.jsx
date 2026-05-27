@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { selectUser, selectAuthInitialized } from '../../store/slices/authSlice'
 import Input from '../../components/ui/Input'
 import Button from '../../components/ui/Button'
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton'
 
 /* ── decorative left panel ─────────────────────────────────────────── */
 function LeftPanel() {
@@ -420,6 +421,8 @@ export default function Login() {
               </button>
             </div>
           </form>
+
+          <GoogleSignInButton redirectTo={from} />
 
           {/* divider */}
           <div

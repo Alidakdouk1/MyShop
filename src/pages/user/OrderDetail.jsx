@@ -4,6 +4,7 @@ import { getOrder, cancelOrder, getReturns, createReturn } from '../../api/order
 import { useToast } from '../../hooks/useToast'
 import { resolveImg } from '../../lib/img'
 import Spinner from '../../components/ui/Spinner'
+import { downloadInvoice } from '../../lib/invoice'
 
 const RETURN_STATUS = {
   requested: { bg: '#FEF9EC', text: '#B8922E', label: 'Requested' },
@@ -12,79 +13,105 @@ const RETURN_STATUS = {
   completed: { bg: '#F0FDF4', text: '#16A34A', label: 'Completed' },
 }
 
-const STEPS = [
-  { key: 'pending',   label: 'Order Placed',  icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-  { key: 'confirmed', label: 'Confirmed',      icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { key: 'shipped',   label: 'Shipped',        icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8l1 12h12L19 8' },
-  { key: 'delivered', label: 'Delivered',      icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-]
+const STEP_META = {
+  pending:   { label: 'Order Placed', sub: 'We received your order',      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+  confirmed: { label: 'Confirmed',    sub: 'Your order is being prepared', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  shipped:   { label: 'Shipped',      sub: 'On its way to you',            icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8l1 12h12L19 8' },
+  delivered: { label: 'Delivered',    sub: 'Order completed',              icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+  cancelled: { label: 'Cancelled',    sub: 'This order was cancelled',     icon: 'M6 18L18 6M6 6l12 12' },
+  refunded:  { label: 'Refunded',     sub: 'This order was refunded',      icon: 'M9 14l-4-4m0 0l4-4m-4 4h11a4 4 0 010 8h-1' },
+}
 
 const STEP_ORDER = ['pending', 'confirmed', 'shipped', 'delivered']
 
-function StatusStepper({ status }) {
-  const isCancelled = status === 'cancelled' || status === 'refunded'
-  const activeIdx   = isCancelled ? -1 : STEP_ORDER.indexOf(status)
+function fmtTs(ts) {
+  if (!ts) return null
+  const d = new Date(String(ts).replace(' ', 'T'))
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
 
-  if (isCancelled) {
-    return (
-      <div className="flex items-center gap-3 py-4">
-        <div className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: '#FEF2F2' }}>
-          <svg className="w-5 h-5" style={{ color: '#C0392B' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </div>
-        <div>
-          <p className="font-bold text-sm capitalize" style={{ color: '#C0392B' }}>
-            Order {status.charAt(0).toUpperCase() + status.slice(1)}
-          </p>
-          <p className="text-xs" style={{ color: '#9C9894' }}>This order has been {status}</p>
-        </div>
-      </div>
-    )
+function OrderTimeline({ status, history = [] }) {
+  const isTerminal = status === 'cancelled' || status === 'refunded'
+
+  // First-seen timestamp for each status.
+  const tsMap = {}
+  ;(history || []).forEach(h => { if (!tsMap[h.status]) tsMap[h.status] = h.created_at })
+
+  let rows
+  if (isTerminal) {
+    // Terminal orders read straight from what actually happened.
+    const evts = (history && history.length) ? history : [{ status, created_at: null }]
+    rows = evts.map((h, i) => {
+      const term = h.status === 'cancelled' || h.status === 'refunded'
+      return {
+        key:   `${h.status}-${i}`,
+        meta:  STEP_META[h.status] || { label: h.status, sub: '', icon: STEP_META.confirmed.icon },
+        ts:    h.created_at,
+        note:  h.note,
+        state: term ? 'terminal' : 'done',
+      }
+    })
+  } else {
+    const activeIdx = STEP_ORDER.indexOf(status)
+    rows = STEP_ORDER.map((key, i) => ({
+      key,
+      meta:  STEP_META[key],
+      ts:    tsMap[key],
+      state: i < activeIdx ? 'done' : i === activeIdx ? 'current' : 'upcoming',
+    }))
   }
 
   return (
-    <div className="flex items-start gap-0 w-full">
-      {STEPS.map((step, i) => {
-        const done    = i <= activeIdx
-        const current = i === activeIdx
+    <ol className="relative">
+      {rows.map((r, i) => {
+        const last      = i === rows.length - 1
+        const term      = r.state === 'terminal'
+        const reached   = r.state === 'done' || r.state === 'current' || term
+        const circleBg  = term ? '#C0392B' : r.state === 'done' ? '#0F0F0F' : r.state === 'current' ? '#fff' : '#F0EEE9'
+        const iconColor = term || r.state === 'done' ? '#fff' : r.state === 'current' ? '#0F0F0F' : '#C8C4BE'
+        const lineDark  = r.state === 'done' || term
+        const tsText    = fmtTs(r.ts)
 
         return (
-          <div key={step.key} className="flex-1 flex flex-col items-center gap-2 relative">
-            {/* Connector line left */}
-            {i > 0 && (
-              <div className="absolute left-0 top-5 w-1/2 h-0.5 -translate-y-1/2 z-0"
-                style={{ background: i <= activeIdx ? '#0F0F0F' : '#E5E2DD' }} />
-            )}
-            {/* Connector line right */}
-            {i < STEPS.length - 1 && (
-              <div className="absolute right-0 top-5 w-1/2 h-0.5 -translate-y-1/2 z-0"
-                style={{ background: i < activeIdx ? '#0F0F0F' : '#E5E2DD' }} />
+          <li key={r.key} className="relative flex gap-4 pb-7 last:pb-0">
+            {/* connector to the next node */}
+            {!last && (
+              <span className="absolute w-0.5"
+                style={{ left: 19, top: 40, bottom: 0, background: lineDark ? '#0F0F0F' : '#E5E2DD' }} />
             )}
 
-            {/* Circle */}
-            <div className="relative z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all"
+            {/* node */}
+            <div className="relative z-10 shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all"
               style={{
-                background: done ? '#0F0F0F' : '#F0EEE9',
-                border: current ? '2px solid #0F0F0F' : 'none',
-                boxShadow: current ? '0 0 0 4px rgba(15,15,15,0.1)' : 'none',
+                background: circleBg,
+                border: r.state === 'current' ? '2px solid #0F0F0F' : 'none',
+                boxShadow: r.state === 'current' ? '0 0 0 4px rgba(15,15,15,0.1)' : 'none',
               }}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                style={{ color: done ? '#fff' : '#C8C4BE' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={step.icon} />
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: iconColor }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={r.meta.icon} />
               </svg>
             </div>
 
-            {/* Label */}
-            <p className="text-[11px] font-semibold text-center leading-tight"
-              style={{ color: done ? '#0F0F0F' : '#9C9894' }}>
-              {step.label}
-            </p>
-          </div>
+            {/* text */}
+            <div className="pt-1.5 min-w-0">
+              <p className="text-sm font-bold leading-tight flex items-center gap-2"
+                style={{ color: term ? '#C0392B' : reached ? '#0F0F0F' : '#9C9894' }}>
+                {r.meta.label}
+                {r.state === 'current' && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                    style={{ background: 'rgba(15,15,15,0.08)', color: '#0F0F0F' }}>Current</span>
+                )}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: '#9C9894' }}>
+                {tsText || (r.state === 'upcoming' ? 'Pending' : r.meta.sub)}
+              </p>
+              {r.note && <p className="text-xs mt-1" style={{ color: '#5C5854' }}>{r.note}</p>}
+            </div>
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }
 
@@ -98,6 +125,19 @@ export default function OrderDetail() {
   const [showReturnForm,   setShowReturnForm]   = useState(false)
   const [returnReason,     setReturnReason]     = useState('')
   const [returnSubmitting, setReturnSubmitting] = useState(false)
+  const [downloading,      setDownloading]      = useState(false)
+
+  const handleDownloadInvoice = async () => {
+    setDownloading(true)
+    try {
+      await downloadInvoice(order)
+    } catch (err) {
+      console.error('Invoice PDF generation failed:', err)
+      toast.error(`PDF error: ${err?.message || err}`)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   useEffect(() => {
     getOrder(id)
@@ -184,16 +224,30 @@ export default function OrderDetail() {
               Placed on {new Date(order.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
-          {canCancel && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="text-sm font-bold px-4 py-2 rounded-xl border transition-all hover:opacity-70 disabled:opacity-40"
-              style={{ borderColor: '#C0392B', color: '#C0392B' }}
+              onClick={handleDownloadInvoice}
+              disabled={downloading}
+              className="inline-flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl border transition-all hover:opacity-70 disabled:opacity-50"
+              style={{ borderColor: '#0F0F0F', color: '#0F0F0F' }}
             >
-              {cancelling ? 'Cancelling…' : 'Cancel Order'}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+              </svg>
+              {downloading ? 'Generating…' : 'Download Invoice'}
             </button>
-          )}
+            {canCancel && (
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="text-sm font-bold px-4 py-2 rounded-xl border transition-all hover:opacity-70 disabled:opacity-40"
+                style={{ borderColor: '#C0392B', color: '#C0392B' }}
+              >
+                {cancelling ? 'Cancelling…' : 'Cancel Order'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -225,7 +279,7 @@ export default function OrderDetail() {
       <div className="rounded-2xl border p-6 mb-4"
         style={{ background: '#fff', borderColor: 'rgba(0,0,0,0.07)' }}>
         <p className="text-xs font-bold uppercase tracking-widest mb-5" style={{ color: '#9C9894' }}>Order Status</p>
-        <StatusStepper status={order.status} />
+        <OrderTimeline status={order.status} history={order.status_history} />
         {order.tracking_number && (
           <div className="mt-5 pt-4 border-t flex items-center gap-2"
             style={{ borderColor: 'rgba(0,0,0,0.06)' }}>

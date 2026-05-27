@@ -147,7 +147,7 @@ CREATE TABLE `cart_items` (
   CONSTRAINT `fk_cart_items_cart` FOREIGN KEY (`cart_id`) REFERENCES `cart` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_cart_items_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_cart_items_variant` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -156,7 +156,7 @@ CREATE TABLE `cart_items` (
 
 LOCK TABLES `cart_items` WRITE;
 /*!40000 ALTER TABLE `cart_items` DISABLE KEYS */;
-INSERT INTO `cart_items` VALUES (2,2,9,19,'2,36,49,69',1,44.99,'2026-05-25 11:09:53','2026-05-25 11:09:53'),(7,1,1,1,NULL,1,19.99,'2026-05-25 23:04:48','2026-05-25 23:04:48'),(8,7,1,1,NULL,1,19.99,'2026-05-25 23:29:41','2026-05-25 23:29:41');
+INSERT INTO `cart_items` VALUES (2,2,9,19,'2,36,49,69',1,44.99,'2026-05-25 11:09:53','2026-05-25 11:09:53'),(7,1,1,1,NULL,2,19.99,'2026-05-25 23:04:48','2026-05-26 22:14:32'),(8,7,1,1,NULL,1,19.99,'2026-05-25 23:29:41','2026-05-25 23:29:41'),(9,1,12,NULL,NULL,1,15.99,'2026-05-26 21:18:31','2026-05-26 21:18:31'),(10,1,13,NULL,NULL,1,6.99,'2026-05-26 21:22:11','2026-05-26 21:22:11');
 /*!40000 ALTER TABLE `cart_items` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -251,6 +251,65 @@ CREATE TABLE `category_sections` (
 LOCK TABLES `category_sections` WRITE;
 /*!40000 ALTER TABLE `category_sections` DISABLE KEYS */;
 /*!40000 ALTER TABLE `category_sections` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `chat_conversations`
+--
+
+DROP TABLE IF EXISTS `chat_conversations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `chat_conversations` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(10) unsigned NOT NULL,
+  `status` enum('open','closed') NOT NULL DEFAULT 'open',
+  `last_message_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_chat_user` (`user_id`),
+  KEY `idx_chat_last` (`last_message_at`),
+  CONSTRAINT `fk_chat_conv_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `chat_conversations`
+--
+
+LOCK TABLES `chat_conversations` WRITE;
+/*!40000 ALTER TABLE `chat_conversations` DISABLE KEYS */;
+/*!40000 ALTER TABLE `chat_conversations` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `chat_messages`
+--
+
+DROP TABLE IF EXISTS `chat_messages`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `chat_messages` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `conversation_id` int(10) unsigned NOT NULL,
+  `sender_id` int(10) unsigned NOT NULL,
+  `sender_role` enum('user','admin') NOT NULL,
+  `body` text NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_chat_msg_conv` (`conversation_id`,`id`),
+  CONSTRAINT `fk_chat_msg_conv` FOREIGN KEY (`conversation_id`) REFERENCES `chat_conversations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `chat_messages`
+--
+
+LOCK TABLES `chat_messages` WRITE;
+/*!40000 ALTER TABLE `chat_messages` DISABLE KEYS */;
+/*!40000 ALTER TABLE `chat_messages` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -459,7 +518,7 @@ CREATE TABLE `notifications` (
   KEY `idx_notifications_is_read` (`user_id`,`is_read`),
   KEY `idx_notifications_created_at` (`created_at`),
   CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -468,7 +527,7 @@ CREATE TABLE `notifications` (
 
 LOCK TABLES `notifications` WRITE;
 /*!40000 ALTER TABLE `notifications` DISABLE KEYS */;
-INSERT INTO `notifications` VALUES (2,7,'order_update','Order #2 Confirmed','Your order of $57.99 has been placed successfully.','/orders/2',0,'2026-05-25 22:30:18'),(3,7,'order_update','Return Requested','Your return request for order #2 has been received.','/account/orders/2',0,'2026-05-25 22:33:09'),(4,7,'order_update','Order #3 Confirmed','Your order of $57.98 has been placed successfully.','/orders/3',0,'2026-05-25 22:59:00');
+INSERT INTO `notifications` VALUES (2,7,'order_update','Order #2 Confirmed','Your order of $57.99 has been placed successfully.','/orders/2',0,'2026-05-25 22:30:18'),(3,7,'order_update','Return Requested','Your return request for order #2 has been received.','/account/orders/2',0,'2026-05-25 22:33:09'),(4,7,'order_update','Order #3 Confirmed','Your order of $57.98 has been placed successfully.','/orders/3',0,'2026-05-25 22:59:00'),(5,7,'order_update','Return Update','Your return for order #2 is now: approved.','/account/orders/2',0,'2026-05-26 21:20:05');
 /*!40000 ALTER TABLE `notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -679,7 +738,7 @@ CREATE TABLE `product_images` (
   KEY `idx_product_images_product_id` (`product_id`),
   KEY `idx_product_images_sort` (`product_id`,`sort_order`),
   CONSTRAINT `fk_product_images_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -688,7 +747,7 @@ CREATE TABLE `product_images` (
 
 LOCK TABLES `product_images` WRITE;
 /*!40000 ALTER TABLE `product_images` DISABLE KEYS */;
-INSERT INTO `product_images` VALUES (1,1,'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(2,2,'https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(3,3,'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(4,4,'https://images.unsplash.com/photo-1564257631407-4deb1f99d992?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(5,5,'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(6,6,'https://images.unsplash.com/photo-1503341504253-dff4815485f1?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(7,7,'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(8,8,'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(9,9,'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(10,10,'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(11,11,'https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(12,12,'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(13,13,'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(14,14,'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(15,15,'https://images.unsplash.com/photo-1601972602288-3be527b4f18a?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(16,16,'https://images.unsplash.com/photo-1593642702821-c8da6771f0c6?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(17,17,'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(18,18,'https://images.unsplash.com/photo-1561154464-82e9adf32764?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(19,19,'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(20,20,'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59');
+INSERT INTO `product_images` VALUES (1,1,'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(2,2,'https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(3,3,'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(4,4,'https://images.unsplash.com/photo-1564257631407-4deb1f99d992?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(5,5,'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(6,6,'https://images.unsplash.com/photo-1503341504253-dff4815485f1?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(7,7,'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(8,8,'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(9,9,'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(10,10,'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(11,11,'https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(12,12,'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(13,13,'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(14,14,'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(15,15,'https://images.unsplash.com/photo-1601972602288-3be527b4f18a?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(16,16,'https://images.unsplash.com/photo-1593642702821-c8da6771f0c6?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(17,17,'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(18,18,'https://images.unsplash.com/photo-1561154464-82e9adf32764?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(19,19,'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(20,20,'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=80',0,1,'2026-05-23 22:30:59'),(21,18,'uploads/products/18/ea4e8bb03040b798ee454bef5c482fba.png',0,0,'2026-05-26 21:21:19');
 /*!40000 ALTER TABLE `product_images` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -774,7 +833,7 @@ CREATE TABLE `products` (
 
 LOCK TABLES `products` WRITE;
 /*!40000 ALTER TABLE `products` DISABLE KEYS */;
-INSERT INTO `products` VALUES (1,2,11,'Floral Wrap Dress','floral-wrap-dress','A beautiful floral wrap dress perfect for summer. Lightweight fabric, midi length.',29.99,19.99,150,'FSD-001','active',1,86,0.30,'2026-05-23 22:30:59','2026-05-25 23:29:37'),(2,2,11,'Elegant Midi Dress','elegant-midi-dress','Classic elegant midi dress with a flattering silhouette. Available in multiple colors.',49.99,NULL,79,'FSD-002','active',1,7,0.35,'2026-05-23 22:30:59','2026-05-25 22:30:18'),(3,2,12,'Casual Cotton Top','casual-cotton-top','Soft 100% cotton casual top, great for everyday wear. Relaxed fit.',14.99,9.99,199,'FCT-001','active',0,1,0.20,'2026-05-23 22:30:59','2026-05-25 11:12:05'),(4,2,12,'Striped Oversized Blouse','striped-oversized-blouse','Trendy striped oversized blouse with dropped shoulders. Perfect for casual outings.',24.99,NULL,120,'FOB-001','active',0,0,0.25,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(5,2,13,'High-Waist Skinny Jeans','high-waist-skinny-jeans','Classic high-waist skinny jeans with stretch fabric for comfort. 5-pocket design.',39.99,29.99,100,'FJN-001','active',1,0,0.60,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(6,2,17,'Men Basic Crew Tee','men-basic-crew-tee','Essential men\'s basic crew neck t-shirt. 100% cotton, pre-shrunk.',12.99,NULL,300,'MBT-001','active',0,10,0.20,'2026-05-23 22:30:59','2026-05-25 22:45:53'),(7,2,18,'Men Oxford Shirt','men-oxford-shirt','Classic Oxford button-down shirt. Smart casual style, wrinkle resistant.',34.99,24.99,88,'MOS-001','active',1,7,0.35,'2026-05-23 22:30:59','2026-05-25 22:59:00'),(8,2,19,'Men Slim Chinos','men-slim-chinos','Slim fit chinos with elasticated waistband. Versatile and comfortable for any occasion.',44.99,NULL,75,'MSC-001','active',0,6,0.55,'2026-05-23 22:30:59','2026-05-24 21:18:59'),(9,2,47,'White Chunky Sneakers','white-chunky-sneakers','Trendy white chunky sole sneakers. Cushioned insole, durable rubber outsole.',59.99,44.99,60,'WSN-001','active',1,6,0.80,'2026-05-23 22:30:59','2026-05-25 11:09:40'),(10,2,45,'Strappy Heeled Sandals','strappy-heeled-sandals','Elegant strappy heeled sandals, 3-inch block heel for comfort and style.',45.99,NULL,45,'SHS-001','active',0,0,0.50,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(11,3,27,'Wireless Earbuds Pro','wireless-earbuds-pro','True wireless earbuds with 30hr battery, active noise cancellation, IPX5 waterproof.',79.99,59.99,200,'TWE-001','active',1,0,0.10,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(12,3,27,'Fast Charge Cable Pack','fast-charge-cable-pack','Pack of 3 braided USB-C cables. Supports 100W fast charging. 6ft length.',15.99,NULL,500,'TCC-001','active',0,18,0.15,'2026-05-23 22:30:59','2026-05-26 11:35:41'),(13,3,30,'Portable Phone Stand','portable-phone-stand','Adjustable aluminum phone stand. Foldable design, fits phones 4-7 inches.',9.99,6.99,400,'TPS-001','active',0,2,0.08,'2026-05-23 22:30:59','2026-05-24 20:57:42'),(14,3,31,'Smart Fitness Tracker','smart-fitness-tracker','Fitness tracker with heart rate monitor, sleep tracking, 7-day battery, waterproof.',49.99,39.99,150,'TFT-001','active',1,0,0.05,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(15,3,30,'Wireless Charging Pad','wireless-charging-pad','15W fast wireless charging pad. Compatible with all Qi devices. LED indicator.',19.99,NULL,250,'TWC-001','active',0,0,0.12,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(16,3,28,'Laptop Cooling Pad','laptop-cooling-pad','Ultra-slim laptop cooling pad with 2 silent fans. Fits laptops up to 17 inches. USB powered.',29.99,22.99,80,'TLP-001','active',0,0,0.45,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(17,3,30,'Bluetooth Keyboard','bluetooth-keyboard','Slim rechargeable Bluetooth keyboard. Multi-device pairing (3 devices), scissor switches.',45.99,NULL,60,'TBK-001','active',1,0,0.40,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(18,3,29,'Tablet Stand Holder','tablet-stand-holder','Adjustable aluminum tablet stand. 360° rotation, compatible with 4-13 inch tablets.',19.99,14.99,120,'TTS-001','active',0,0,0.22,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(19,2,37,'Vitamin C Face Serum','vitamin-c-face-serum','20% Vitamin C serum with hyaluronic acid and Vitamin E. Brightening and anti-aging.',24.99,18.99,180,'BCS-001','active',1,2,0.10,'2026-05-23 22:30:59','2026-05-23 23:02:30'),(20,2,8,'Canvas Tote Bag','canvas-tote-bag','Large canvas tote bag with inner zip pocket and magnetic closure. 100% cotton.',22.99,NULL,200,'CTB-001','active',0,0,0.30,'2026-05-23 22:30:59','2026-05-23 22:30:59');
+INSERT INTO `products` VALUES (1,2,11,'Floral Wrap Dress','floral-wrap-dress','A beautiful floral wrap dress perfect for summer. Lightweight fabric, midi length.',29.99,19.99,150,'FSD-001','active',1,92,0.30,'2026-05-23 22:30:59','2026-05-26 22:21:29'),(2,2,11,'Elegant Midi Dress','elegant-midi-dress','Classic elegant midi dress with a flattering silhouette. Available in multiple colors.',49.99,NULL,79,'FSD-002','active',1,7,0.35,'2026-05-23 22:30:59','2026-05-25 22:30:18'),(3,2,12,'Casual Cotton Top','casual-cotton-top','Soft 100% cotton casual top, great for everyday wear. Relaxed fit.',14.99,9.99,199,'FCT-001','active',0,1,0.20,'2026-05-23 22:30:59','2026-05-25 11:12:05'),(4,2,12,'Striped Oversized Blouse','striped-oversized-blouse','Trendy striped oversized blouse with dropped shoulders. Perfect for casual outings.',24.99,NULL,120,'FOB-001','active',0,0,0.25,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(5,2,13,'High-Waist Skinny Jeans','high-waist-skinny-jeans','Classic high-waist skinny jeans with stretch fabric for comfort. 5-pocket design.',39.99,29.99,100,'FJN-001','active',1,0,0.60,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(6,2,17,'Men Basic Crew Tee','men-basic-crew-tee','Essential men\'s basic crew neck t-shirt. 100% cotton, pre-shrunk.',12.99,NULL,300,'MBT-001','active',0,10,0.20,'2026-05-23 22:30:59','2026-05-25 22:45:53'),(7,2,18,'Men Oxford Shirt','men-oxford-shirt','Classic Oxford button-down shirt. Smart casual style, wrinkle resistant.',34.99,24.99,88,'MOS-001','active',1,7,0.35,'2026-05-23 22:30:59','2026-05-25 22:59:00'),(8,2,19,'Men Slim Chinos','men-slim-chinos','Slim fit chinos with elasticated waistband. Versatile and comfortable for any occasion.',44.99,NULL,75,'MSC-001','active',0,6,0.55,'2026-05-23 22:30:59','2026-05-24 21:18:59'),(9,2,47,'White Chunky Sneakers','white-chunky-sneakers','Trendy white chunky sole sneakers. Cushioned insole, durable rubber outsole.',59.99,44.99,60,'WSN-001','active',1,6,0.80,'2026-05-23 22:30:59','2026-05-25 11:09:40'),(10,2,45,'Strappy Heeled Sandals','strappy-heeled-sandals','Elegant strappy heeled sandals, 3-inch block heel for comfort and style.',45.99,NULL,45,'SHS-001','active',0,0,0.50,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(11,3,27,'Wireless Earbuds Pro','wireless-earbuds-pro','True wireless earbuds with 30hr battery, active noise cancellation, IPX5 waterproof.',79.99,59.99,200,'TWE-001','active',1,0,0.10,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(12,3,27,'Fast Charge Cable Pack','fast-charge-cable-pack','Pack of 3 braided USB-C cables. Supports 100W fast charging. 6ft length.',15.99,NULL,500,'TCC-001','active',0,20,0.15,'2026-05-23 22:30:59','2026-05-26 21:18:26'),(13,3,30,'Portable Phone Stand','portable-phone-stand','Adjustable aluminum phone stand. Foldable design, fits phones 4-7 inches.',9.99,6.99,400,'TPS-001','active',0,6,0.08,'2026-05-23 22:30:59','2026-05-26 21:22:27'),(14,3,31,'Smart Fitness Tracker','smart-fitness-tracker','Fitness tracker with heart rate monitor, sleep tracking, 7-day battery, waterproof.',49.99,39.99,150,'TFT-001','active',1,0,0.05,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(15,3,30,'Wireless Charging Pad','wireless-charging-pad','15W fast wireless charging pad. Compatible with all Qi devices. LED indicator.',19.99,NULL,250,'TWC-001','active',0,0,0.12,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(16,3,28,'Laptop Cooling Pad','laptop-cooling-pad','Ultra-slim laptop cooling pad with 2 silent fans. Fits laptops up to 17 inches. USB powered.',29.99,22.99,80,'TLP-001','active',0,0,0.45,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(17,3,30,'Bluetooth Keyboard','bluetooth-keyboard','Slim rechargeable Bluetooth keyboard. Multi-device pairing (3 devices), scissor switches.',45.99,NULL,60,'TBK-001','active',1,0,0.40,'2026-05-23 22:30:59','2026-05-23 22:30:59'),(18,3,29,'Tablet Stand Holder','tablet-stand-holder-ed47f5ed','Adjustable aluminum tablet stand. 360° rotation, compatible with 4-13 inch tablets.',19.99,14.99,0,'TTS-001','active',0,3,0.22,'2026-05-23 22:30:59','2026-05-26 21:22:39'),(19,2,37,'Vitamin C Face Serum','vitamin-c-face-serum','20% Vitamin C serum with hyaluronic acid and Vitamin E. Brightening and anti-aging.',24.99,18.99,180,'BCS-001','active',1,2,0.10,'2026-05-23 22:30:59','2026-05-23 23:02:30'),(20,2,8,'Canvas Tote Bag','canvas-tote-bag','Large canvas tote bag with inner zip pocket and magnetic closure. 100% cotton.',22.99,NULL,200,'CTB-001','active',0,0,0.30,'2026-05-23 22:30:59','2026-05-23 22:30:59');
 /*!40000 ALTER TABLE `products` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -809,7 +868,7 @@ CREATE TABLE `return_requests` (
 
 LOCK TABLES `return_requests` WRITE;
 /*!40000 ALTER TABLE `return_requests` DISABLE KEYS */;
-INSERT INTO `return_requests` VALUES (1,2,7,'no','requested',NULL,'2026-05-25 22:33:09','2026-05-25 22:33:09');
+INSERT INTO `return_requests` VALUES (1,2,7,'no','approved','no comment','2026-05-25 22:33:09','2026-05-26 21:20:05');
 /*!40000 ALTER TABLE `return_requests` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -920,7 +979,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'Admin User','admin@myshop.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','admin',NULL,'+1-555-0001',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(2,'Fashion Store','vendor1@myshop.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','vendor',NULL,'+1-555-0002',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(3,'Tech World','vendor2@myshop.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','vendor',NULL,'+1-555-0003',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(4,'Alice Johnson','alice@example.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','customer',NULL,'+1-555-0004',1,NULL,NULL,NULL,'$2y$10$qqorUF4I.3vP445xCQ3DG.6aPOcSm/xkzLz8Mig4RDYdyaw4.6guG','2026-05-25 22:29:33','2026-05-23 22:30:48','2026-05-25 23:29:45'),(5,'Bob Smith','bob@example.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','customer',NULL,'+1-555-0005',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(6,'Carol Davis','carol@example.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','customer',NULL,'+1-555-0006',0,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(7,'MyShop Admin','myshop@gmail.com','$2y$12$Zggc4tu29lpYImadkyVbauMJYh23.w6460rkJvxyCFYRBQveZ8EXO','admin',NULL,NULL,1,NULL,NULL,NULL,'$2y$10$EcBYueiwonKArES4ZW8K4ekOLyVDFOBk9uGqFeQmuesJOWiftIa1m','2026-05-25 21:22:58','2026-05-23 22:31:10','2026-05-26 00:07:28'),(9,'Ali Ahmad Dakdouk','alidakdouk70@gmail.com','$2y$12$rZSkmj3Tq97nCczaApyMX.yOLxjW0MiH1LQ.Tx3.qcoxmG3RpjXYG','customer',NULL,'',0,'bb49e45c5c62c3d4221bf2d75d47d99e89bd2ad761edc6dec38e1e84975e404c',NULL,NULL,'$2y$10$u94eUj1LJ/cb/uDcvFrsM.GyL8JdDUOHli5z4o3ft1h6NEWrGnpRK','2026-05-24 20:50:10','2026-05-23 23:03:44','2026-05-25 22:17:40'),(10,'Ali Ahmad Dakdouk','alidakdouk7@gmail.com','$2y$12$vEqmJFu5WWUR7rP5LmYiueOvKRSgeKzoBuDkn3hAAVWICgjoU5V8G','customer',NULL,'',0,'412707a156b0415c023deebcf5e8d39d5f005cc9e25145b6008378e62a4e7aeb',NULL,NULL,'$2y$10$lVwgsZt49KQPAPI6iW9aruPX6yt/W2ZeMtV4dKmufl6jJiJkh3gke','2026-05-23 22:26:33','2026-05-23 23:26:31','2026-05-23 23:26:33');
+INSERT INTO `users` VALUES (1,'Admin User','admin@myshop.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','admin',NULL,'+1-555-0001',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(2,'Fashion Store','vendor1@myshop.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','vendor',NULL,'+1-555-0002',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(3,'Tech World','vendor2@myshop.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','vendor',NULL,'+1-555-0003',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(4,'Alice Johnson','alice@example.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','customer',NULL,'+1-555-0004',1,NULL,NULL,NULL,'$2y$10$qqorUF4I.3vP445xCQ3DG.6aPOcSm/xkzLz8Mig4RDYdyaw4.6guG','2026-05-25 22:29:33','2026-05-23 22:30:48','2026-05-25 23:29:45'),(5,'Bob Smith','bob@example.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','customer',NULL,'+1-555-0005',1,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(6,'Carol Davis','carol@example.com','$2y$12$4JboU8J/9xmQRhbrExnldOFvdaair0TlMCKMtyFAf7LQbrRs2Qf12','customer',NULL,'+1-555-0006',0,NULL,NULL,NULL,NULL,NULL,'2026-05-23 22:30:48','2026-05-25 11:15:57'),(7,'MyShop Admin','myshop@gmail.com','$2y$12$Zggc4tu29lpYImadkyVbauMJYh23.w6460rkJvxyCFYRBQveZ8EXO','admin',NULL,NULL,1,NULL,NULL,NULL,'$2y$10$5Pq7CAL3/xwpZcVqZnHMc.lje47X1MlegNyfvS5M8QCikHtHym32q','2026-05-25 21:22:58','2026-05-23 22:31:10','2026-05-26 22:30:38'),(9,'Ali Ahmad Dakdouk','alidakdouk70@gmail.com','$2y$12$rZSkmj3Tq97nCczaApyMX.yOLxjW0MiH1LQ.Tx3.qcoxmG3RpjXYG','customer',NULL,'',0,'bb49e45c5c62c3d4221bf2d75d47d99e89bd2ad761edc6dec38e1e84975e404c',NULL,NULL,'$2y$10$u94eUj1LJ/cb/uDcvFrsM.GyL8JdDUOHli5z4o3ft1h6NEWrGnpRK','2026-05-24 20:50:10','2026-05-23 23:03:44','2026-05-25 22:17:40'),(10,'Ali Ahmad Dakdouk','alidakdouk7@gmail.com','$2y$12$vEqmJFu5WWUR7rP5LmYiueOvKRSgeKzoBuDkn3hAAVWICgjoU5V8G','customer',NULL,'',0,'412707a156b0415c023deebcf5e8d39d5f005cc9e25145b6008378e62a4e7aeb',NULL,NULL,'$2y$10$lVwgsZt49KQPAPI6iW9aruPX6yt/W2ZeMtV4dKmufl6jJiJkh3gke','2026-05-23 22:26:33','2026-05-23 23:26:31','2026-05-23 23:26:33');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1003,4 +1062,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-05-26 11:36:05
+-- Dump completed on 2026-05-26 22:31:52

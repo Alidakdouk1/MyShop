@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutThunk } from '../../store/slices/authSlice'
+import { getAdminChatUnread } from '../../api/chatApi'
+import { getAdminQuestionsUnread } from '../../api/questionApi'
 import ToastContainer from '../ui/Toast'
 
 const NAV = [
@@ -14,6 +16,14 @@ const NAV = [
         <rect x="11" y="2" width="7" height="7" rx="1.5" />
         <rect x="2" y="11" width="7" height="7" rx="1.5" />
         <rect x="11" y="11" width="7" height="7" rx="1.5" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/analytics', label: 'Analytics',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1v-6zM8 6a1 1 0 011-1h2a1 1 0 011 1v11a1 1 0 01-1 1H9a1 1 0 01-1-1V6zM14 3a1 1 0 011-1h2a1 1 0 011 1v14a1 1 0 01-1 1h-2a1 1 0 01-1-1V3z" />
       </svg>
     ),
   },
@@ -67,6 +77,38 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/chat', label: 'Chat',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.84 8.84 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zm-4 0H9v2h2V9z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/questions', label: 'Q&A',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.84 8.84 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM10 6a2 2 0 00-1.732 1 1 1 0 101.732 1 .5.5 0 11.5.5 1 1 0 00-1 1v.5a1 1 0 102 0 2.5 2.5 0 10-1.5-4.5zM10 14a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/currencies', label: 'Currencies',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 012.871-.514l.504.168a.75.75 0 00.948-.948l-.168-.504a4.5 4.5 0 00-7.062 4.991.75.75 0 001.41-.513 3 3 0 01.658-3.108zM10 7a.75.75 0 01.75.75v.518a3 3 0 011.871 4.798.75.75 0 11-1.06-1.06A1.5 1.5 0 0010.75 9.5V11a.75.75 0 01-1.5 0V9.5a1.5 1.5 0 00-.81 2.756.75.75 0 11-.81 1.262A3 3 0 019.25 8.268V7.75A.75.75 0 0110 7z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/flash-sales', label: 'Flash Sales',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M11 3a1 1 0 00-1.7-.7L3.3 9.3a1 1 0 00.7 1.7H8v6a1 1 0 001.7.7l6-7a1 1 0 00-.7-1.7H11V3z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/returns', label: 'Returns',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -97,6 +139,23 @@ export default function AdminLayout({ children }) {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const [sideOpen, setSideOpen] = useState(false)
+  const [chatUnread, setChatUnread] = useState(0)
+  const [qaUnread, setQaUnread]     = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    const tick = () => {
+      getAdminChatUnread()
+        .then(r => { if (alive) setChatUnread(r.data.data.unread || 0) })
+        .catch(() => {})
+      getAdminQuestionsUnread()
+        .then(r => { if (alive) setQaUnread(r.data.data.unread || 0) })
+        .catch(() => {})
+    }
+    tick()
+    const iv = setInterval(tick, 15000)
+    return () => { alive = false; clearInterval(iv) }
+  }, [])
 
   const handleLogout = async () => {
     await dispatch(logoutThunk())
@@ -184,9 +243,20 @@ export default function AdminLayout({ children }) {
                     {item.icon}
                   </span>
                   {item.label}
-                  {isActive && (
+                  {(() => {
+                    const badge = item.to === '/admin/chat' ? chatUnread
+                                : item.to === '/admin/questions' ? qaUnread : 0
+                    return badge > 0
+                  })() ? (
+                    <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center" style={{ background: '#C0392B' }}>
+                      {(() => {
+                        const badge = item.to === '/admin/chat' ? chatUnread : qaUnread
+                        return badge > 9 ? '9+' : badge
+                      })()}
+                    </span>
+                  ) : isActive ? (
                     <span className="ml-auto w-1.5 h-1.5 rounded-full" style={{ background: '#C0392B' }} />
-                  )}
+                  ) : null}
                 </>
               )}
             </NavLink>

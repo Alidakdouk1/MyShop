@@ -5,9 +5,11 @@ import { addToCartThunk } from '../../store/slices/cartSlice'
 import { toggleWishlistThunk, selectIsWishlisted, selectWishlistItemId } from '../../store/slices/wishlistSlice'
 import { selectUser } from '../../store/slices/authSlice'
 import { useToast } from '../../hooks/useToast'
+import { useCurrency } from '../../context/CurrencyContext'
 import Badge from '../ui/Badge'
 import StarRating from '../common/StarRating'
 import QuickView from './QuickView'
+import FlashCountdown from './FlashCountdown'
 
 const SHAPE_CLASS = {
   rounded: 'rounded-2xl',
@@ -23,21 +25,31 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
   const imageRatio   = cardSettings.image_ratio    || '3/4'
   const dispatch  = useDispatch()
   const toast     = useToast()
+  const { format } = useCurrency()
   const user      = useSelector(selectUser)
   const isWished  = useSelector(selectIsWishlisted(product.id))
   const wItemId   = useSelector(selectWishlistItemId(product.id))
   const [adding, setAdding] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
+  const [flashExpired, setFlashExpired] = useState(false)
 
-  // API returns base_price + optional sale_price; effective price is sale_price ?? base_price
-  const effectivePrice = product.sale_price || product.base_price || product.price || 0
+  // API returns base_price + optional sale_price; an active flash sale overrides both.
+  const flash          = (product.flash_sale && !flashExpired) ? product.flash_sale : null
   const basePrice      = product.base_price || product.price || 0
-  const discountPct = product.sale_price && product.sale_price < basePrice
-    ? Math.round((1 - product.sale_price / basePrice) * 100)
+  const effectivePrice = flash ? Number(flash.flash_price)
+    : (product.sale_price || product.base_price || product.price || 0)
+  const discountPct = effectivePrice < basePrice
+    ? Math.round((1 - effectivePrice / basePrice) * 100)
     : 0
   const discount = discountPct > 0 ? discountPct : null
 
   const hasVariants = Number(product.variant_count) > 0
+  // Base stock_qty is the source of truth for simple + option products. Variant
+  // products carry stock per-variant (picked on the detail page), so we don't
+  // flag those out-of-stock from here.
+  const stockQty = Number(product.stock_qty || 0)
+  const isOut    = !hasVariants && stockQty === 0
+  const isLow    = !hasVariants && stockQty > 0 && stockQty <= 10
 
   const rawSrc = product.primary_image || product.main_image
   const imgSrc = rawSrc
@@ -75,17 +87,28 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
           {/* Soft gradient sheen that lifts on hover */}
           <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-ink/15 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           {/* Badges */}
-          {showBadges && (
-            <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-              {discount && <Badge variant="sale">-{discount}%</Badge>}
-              {product.is_new && <Badge variant="new">New</Badge>}
+          {(showBadges || isLow) && (
+            <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5">
+              {showBadges && flash
+                ? <Badge variant="sale">⚡ Flash -{discount}%</Badge>
+                : showBadges && discount && <Badge variant="sale">-{discount}%</Badge>}
+              {showBadges && product.is_new && <Badge variant="new">New</Badge>}
+              {isLow && <Badge variant="warning" size="xs">Only {stockQty} left</Badge>}
+            </div>
+          )}
+          {/* Out-of-stock overlay */}
+          {isOut && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
+              <span className="bg-ink/85 text-white text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full">
+                Out of Stock
+              </span>
             </div>
           )}
           {/* Wishlist */}
           <button
             onClick={handleWishlist}
             aria-label={isWished ? 'Remove from wishlist' : 'Add to wishlist'}
-            className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center
+            className={`absolute top-3 right-3 z-20 w-9 h-9 rounded-full flex items-center justify-center
               transition-all duration-300 ease-(--ease-out-back) shadow-md active:scale-90
               ${isWished
                 ? 'bg-accent text-white scale-100'
@@ -101,7 +124,7 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
           <button
             onClick={(e) => { e.preventDefault(); setQuickOpen(true) }}
             aria-label="Quick view"
-            className="absolute top-14 right-3 w-9 h-9 rounded-full flex items-center justify-center
+            className="absolute top-14 right-3 z-20 w-9 h-9 rounded-full flex items-center justify-center
               bg-white/70 backdrop-blur-md text-ink-tertiary shadow-md
               opacity-0 group-hover:opacity-100 hover:text-ink hover:bg-white hover:scale-110
               transition-all duration-300 ease-(--ease-out-back) active:scale-90"
@@ -111,8 +134,8 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
-          {/* Quick add — only for products without variants */}
-          {showQuickAdd && !hasVariants && (
+          {/* Quick add — only for in-stock products without variants */}
+          {showQuickAdd && !hasVariants && !isOut && (
             <div className="absolute bottom-0 inset-x-0 p-3 translate-y-full opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-(--ease-out-soft)">
               <button
                 onClick={handleAddToCart}
@@ -137,13 +160,22 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
             </div>
           )}
           <div className="flex items-center gap-2">
-            <span className="font-bold text-ink">${Number(effectivePrice).toFixed(2)}</span>
+            <span className="font-bold text-ink">{format(effectivePrice)}</span>
             {discount && (
               <span className="text-xs text-ink-tertiary line-through">
-                ${Number(basePrice).toFixed(2)}
+                {format(basePrice)}
               </span>
             )}
           </div>
+          {flash && (
+            <div className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-accent">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M11 3a1 1 0 00-1.7-.7L3.3 9.3a1 1 0 00.7 1.7H8v6a1 1 0 001.7.7l6-7a1 1 0 00-.7-1.7H11V3z" />
+              </svg>
+              <span>Ends in </span>
+              <FlashCountdown endsAt={flash.ends_at} onExpire={() => setFlashExpired(true)} />
+            </div>
+          )}
         </div>
       </div>
     </Link>

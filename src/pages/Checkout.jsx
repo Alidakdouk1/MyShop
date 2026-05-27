@@ -6,6 +6,7 @@ import { checkout, validateCoupon } from '../api/orderApi'
 import { computeTotals } from '../lib/storeConfig'
 import { resolveImg } from '../lib/img'
 import { useToast } from '../hooks/useToast'
+import { useCurrency } from '../context/CurrencyContext'
 import Input from '../components/ui/Input'
 import Button from '../components/ui/Button'
 
@@ -17,6 +18,7 @@ export default function Checkout() {
   const toast    = useToast()
   const items    = useSelector(selectCartItems)
   const subtotal = useSelector(selectCartTotal)
+  const { format } = useCurrency()
   const [step, setStep]       = useState(0)
   const [loading, setLoading] = useState(false)
   const [coupon, setCoupon]   = useState('')
@@ -52,7 +54,7 @@ export default function Checkout() {
         ? subtotal * d.value / 100
         : Math.min(d.value, subtotal)
       setDiscount(saved)
-      toast.success(`Coupon applied! You save $${saved.toFixed(2)}`)
+      toast.success(`Coupon applied! You save ${format(saved)}`)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid coupon')
     } finally { setCouponLoading(false) }
@@ -173,7 +175,7 @@ export default function Checkout() {
               <div className="flex gap-3 pt-2">
                 <Button variant="secondary" onClick={() => setStep(1)}>← Back</Button>
                 <Button onClick={placeOrder} loading={loading} size="lg" variant="accent">
-                  Place Order · ${total.toFixed(2)}
+                  Place Order · {format(total)}
                 </Button>
               </div>
             </div>
@@ -194,7 +196,7 @@ export default function Checkout() {
                       <p className="text-xs font-medium text-ink line-clamp-2">{i.name}</p>
                       <p className="text-xs text-ink-tertiary">×{i.quantity}</p>
                     </div>
-                    <span className="text-sm font-semibold text-ink shrink-0">${(parseFloat(i.price) * i.quantity).toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-ink shrink-0">{format(parseFloat(i.price) * i.quantity)}</span>
                   </div>
                 )
               })}
@@ -214,16 +216,16 @@ export default function Checkout() {
             {/* Free-shipping progress nudge */}
             {freeShippingRemaining > 0 && (
               <div className="text-xs text-ink-secondary bg-surface-alt rounded-xl px-3 py-2.5">
-                Add <span className="font-bold text-ink">${freeShippingRemaining.toFixed(2)}</span> more to unlock <span className="font-semibold text-ink">free shipping</span>.
+                Add <span className="font-bold text-ink">{format(freeShippingRemaining)}</span> more to unlock <span className="font-semibold text-ink">free shipping</span>.
               </div>
             )}
 
             <div className="border-t border-border pt-3 space-y-2">
-              <Row label="Subtotal"     value={`$${subtotal.toFixed(2)}`} />
-              {discount > 0 && <Row label="Discount" value={`-$${discount.toFixed(2)}`} accent />}
-              <Row label="Shipping"     value={shipping === 0 ? 'Free' : `$${shipping.toFixed(2)}`} />
-              {tax > 0 && <Row label="Tax" value={`$${tax.toFixed(2)}`} />}
-              <Row label="Total"        value={`$${total.toFixed(2)}`} bold />
+              <Row label="Subtotal"     value={format(subtotal)} />
+              {discount > 0 && <Row label="Discount" value={`-${format(discount)}`} accent />}
+              <Row label="Shipping"     value={shipping === 0 ? 'Free' : format(shipping)} />
+              {tax > 0 && <Row label="Tax" value={format(tax)} />}
+              <Row label="Total"        value={format(total)} bold />
             </div>
           </div>
         </div>

@@ -24,6 +24,15 @@ export const logoutThunk = createAsyncThunk('auth/logout', async () => {
   window.__accessToken = null
 })
 
+export const googleLoginThunk = createAsyncThunk('auth/googleLogin', async (credential, { rejectWithValue }) => {
+  try {
+    const { data } = await authApi.googleLogin(credential)
+    return data.data
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || 'Google login failed')
+  }
+})
+
 export const getMeThunk = createAsyncThunk('auth/me', async (_, { rejectWithValue }) => {
   try {
     const { data } = await authApi.getMe()
@@ -56,7 +65,14 @@ const authSlice = createSlice({
         s.user = a.payload.user
         window.__accessToken = a.payload.access_token
       })
-      .addCase(registerThunk.rejected,  (s, a) => { s.loading = false; s.error = a.payload })
+      .addCase(registerThunk.rejected,   (s, a) => { s.loading = false; s.error = a.payload })
+      .addCase(googleLoginThunk.pending,    s => { s.loading = true; s.error = null })
+      .addCase(googleLoginThunk.fulfilled,  (s, a) => {
+        s.loading = false
+        s.user = a.payload.user
+        window.__accessToken = a.payload.access_token
+      })
+      .addCase(googleLoginThunk.rejected,   (s, a) => { s.loading = false; s.error = a.payload })
       .addCase(logoutThunk.fulfilled,   s => { s.user = null })
       .addCase(getMeThunk.pending,      s => { s.loading = true })
       .addCase(getMeThunk.fulfilled,    (s, a) => { s.loading = false; s.user = a.payload; s.initialized = true })

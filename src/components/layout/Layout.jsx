@@ -3,6 +3,8 @@ import Navbar from './Navbar'
 import Footer from './Footer'
 import BottomNav from './BottomNav'
 import ToastContainer from '../ui/Toast'
+import WhatsAppButton from '../common/WhatsAppButton'
+import ChatWidget from '../chat/ChatWidget'
 
 // Shared header state so sticky sub-bars (e.g. the Shop category bar) can
 // follow the header as it hides/shows on scroll.
@@ -51,6 +53,8 @@ export default function Layout({ children }) {
         {/* Spacer so page content clears the fixed mobile bottom nav */}
         <div className="h-[68px] md:hidden" aria-hidden="true" />
         <BottomNav />
+        <WhatsAppButton />
+        <ChatWidget />
         <ToastContainer />
       </div>
     </HeaderUIContext.Provider>

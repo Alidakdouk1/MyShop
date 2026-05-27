@@ -97,6 +97,66 @@ class AuthController
         ], 'Login successful');
     }
 
+    public function googleLogin(): never
+    {
+        method('POST');
+        RateLimiter::check('google_login', 10, 60);
+        $data      = getBody();
+        $idToken   = trim($data['credential'] ?? '');
+        if (!$idToken) error('Google credential is required.', 422);
+
+        $clientId = env('GOOGLE_CLIENT_ID', '');
+        if (!$clientId) error('Google login is not configured on this server.', 503);
+
+        $ch = curl_init('https://oauth2.googleapis.com/tokeninfo?id_token=' . urlencode($idToken));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $body     = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if (!$body || $httpCode !== 200) error('Failed to verify Google token.', 401);
+
+        $payload = json_decode($body, true);
+        if (($payload['aud'] ?? '') !== $clientId)    error('Google token audience mismatch.', 401);
+        if (($payload['email_verified'] ?? '') !== 'true') error('Google account email not verified.', 401);
+
+        $email   = $payload['email'] ?? '';
+        $name    = $payload['name']  ?? explode('@', $email)[0];
+        $picture = $payload['picture'] ?? null;
+        if (!$email) error('No email returned from Google.', 401);
+
+        $user = $this->users->findByEmail($email);
+
+        if (!$user) {
+            $userId = $this->users->create([
+                'name'          => $name,
+                'email'         => $email,
+                'password_hash' => password_hash(bin2hex(random_bytes(32)), PASSWORD_BCRYPT),
+                'role'          => 'customer',
+            ]);
+            $this->users->update($userId, [
+                'is_verified' => 1,
+                'avatar_url'  => $picture,
+            ]);
+            $user = $this->users->findById($userId);
+        }
+
+        $accessToken  = JWTHelper::accessToken($user);
+        $refreshToken = JWTHelper::refreshToken($user);
+
+        $this->users->update($user['id'], [
+            'refresh_token_hash' => password_hash($refreshToken, PASSWORD_BCRYPT),
+            'last_login_at'      => date('Y-m-d H:i:s'),
+        ]);
+
+        AuthMiddleware::setRefreshCookie($refreshToken);
+        success([
+            'access_token' => $accessToken,
+            'user'         => $this->users->safe($user),
+        ], 'Login successful');
+    }
+
     public function logout(): never
     {
         method('POST');

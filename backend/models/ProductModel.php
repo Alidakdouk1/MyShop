@@ -317,4 +317,36 @@ class ProductModel extends BaseModel
         return $this->search(['featured' => true], $limit, 0);
     }
 
+    /**
+     * Market-basket recommendation: products that appear in the same orders as
+     * $productId, ranked by how often they were bought alongside it. Returns
+     * ProductCard-shaped rows plus a `together_count` (number of shared orders).
+     */
+    public function frequentlyBoughtTogether(int $productId, int $limit = 6): array
+    {
+        return $this->query(
+            "SELECT p.id, p.name, p.slug, p.base_price, p.sale_price, p.stock_qty,
+                    p.is_featured, p.views_count, p.status, p.created_at,
+                    c.name AS category_name,
+                    (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image,
+                    (SELECT ROUND(AVG(rating),1) FROM reviews WHERE product_id = p.id) AS rating_avg,
+                    (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS review_count,
+                    (SELECT COUNT(*) FROM product_variants WHERE product_id = p.id) AS variant_count,
+                    COUNT(DISTINCT oi2.order_id) AS together_count
+             FROM order_items oi1
+             JOIN order_items oi2
+                  ON oi2.order_id = oi1.order_id
+                 AND oi2.product_id <> oi1.product_id
+             JOIN products p   ON p.id = oi2.product_id
+             JOIN categories c ON c.id = p.category_id
+             WHERE oi1.product_id = ?
+               AND p.status = 'active'
+             GROUP BY p.id, p.name, p.slug, p.base_price, p.sale_price, p.stock_qty,
+                      p.is_featured, p.views_count, p.status, p.created_at, c.name
+             ORDER BY together_count DESC, p.views_count DESC
+             LIMIT ?",
+            [$productId, $limit]
+        )->fetchAll();
+    }
+
 }

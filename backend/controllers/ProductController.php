@@ -10,6 +10,25 @@ class ProductController
         $this->products = new ProductModel();
     }
 
+    /** Attach `flash_sale` (title, discount, ends_at, flash_price) to any product
+     *  rows that are in a currently-active flash sale. */
+    private function attachFlash(array $products): array
+    {
+        if (!$products) return $products;
+        $map = (new FlashSaleModel())->activeForProductIds(array_map(fn($p) => (int) $p['id'], $products));
+        foreach ($products as &$p) {
+            $sale = $map[(int) $p['id']] ?? null;
+            if (!$sale) continue;
+            $p['flash_sale'] = [
+                'title'            => $sale['title'],
+                'discount_percent' => $sale['discount_percent'],
+                'ends_at'          => $sale['ends_at'],
+                'flash_price'      => FlashSaleModel::priceFor($p, $sale),
+            ];
+        }
+        return $products;
+    }
+
     public function index(): never
     {
         method('GET');
@@ -28,6 +47,7 @@ class ProductController
             'range_filters'  => $this->parseRangeFilterParams($_GET),
         ];
         $items = $this->products->search($filters, $perPage, $offset);
+        $items = $this->attachFlash($items);
         $total = $this->products->countSearch($filters);
         paginated($items, $total, $page, $perPage);
     }
@@ -111,6 +131,29 @@ class ProductController
             'sort'        => 'newest',
         ], 200, 0);
         $product['related'] = array_values(array_filter($related, fn($p) => $p['id'] !== $product['id']));
+
+        // "Frequently bought together" from real co-purchase history. When the
+        // store is young and there isn't enough order data yet, top up with the
+        // most-viewed items from the same category so the block still shows.
+        $fbt        = $this->products->frequentlyBoughtTogether((int) $product['id'], 6);
+        $takenIds   = array_map(fn($r) => (int) $r['id'], $fbt);
+        $takenIds[] = (int) $product['id'];
+        if (count($fbt) < 4) {
+            $popular = $this->products->search([
+                'category_id' => $searchCatId,
+                'sort'        => 'popular',
+            ], 20, 0);
+            foreach ($popular as $cand) {
+                if (count($fbt) >= 4) break;
+                if (in_array((int) $cand['id'], $takenIds, true)) continue;
+                $cand['together_count'] = 0;
+                $fbt[]      = $cand;
+                $takenIds[] = (int) $cand['id'];
+            }
+        }
+        $product['related']         = $this->attachFlash($product['related']);
+        $product['bought_together'] = $this->attachFlash($fbt);
+        $product                    = $this->attachFlash([$product])[0];
 
         success($product);
     }

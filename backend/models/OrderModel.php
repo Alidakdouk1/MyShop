@@ -19,7 +19,28 @@ class OrderModel extends BaseModel
                 $data['notes'] ?? null,
             ]
         );
-        return $this->lastId();
+        $id = $this->lastId();
+        $this->addStatusHistory($id, 'pending');
+        return $id;
+    }
+
+    /** Append a status change to the order's tracking timeline. */
+    public function addStatusHistory(int $orderId, string $status, ?string $note = null): void
+    {
+        $this->query(
+            "INSERT INTO order_status_history (order_id, status, note) VALUES (?, ?, ?)",
+            [$orderId, $status, $note]
+        );
+    }
+
+    /** Chronological status events for an order's tracking timeline. */
+    public function statusHistory(int $orderId): array
+    {
+        return $this->query(
+            "SELECT status, note, created_at FROM order_status_history
+             WHERE order_id = ? ORDER BY created_at ASC, id ASC",
+            [$orderId]
+        )->fetchAll();
     }
 
     public function addItem(int $orderId, array $item, array $optionIds = []): int
@@ -63,6 +84,7 @@ class OrderModel extends BaseModel
              WHERE oi.order_id = ?",
             [$orderId]
         )->fetchAll();
+        $order['status_history'] = $this->statusHistory($orderId);
         return $order;
     }
 
@@ -138,7 +160,10 @@ class OrderModel extends BaseModel
 
     public function updateStatus(int $id, string $status): bool
     {
-        return $this->query("UPDATE orders SET status = ? WHERE id = ?", [$status, $id])->rowCount() > 0;
+        // rowCount > 0 means the value actually changed — only log real transitions.
+        $changed = $this->query("UPDATE orders SET status = ? WHERE id = ?", [$status, $id])->rowCount() > 0;
+        if ($changed) $this->addStatusHistory($id, $status);
+        return $changed;
     }
 
     /**
@@ -160,6 +185,7 @@ class OrderModel extends BaseModel
         try {
             if ($shouldRestore) $this->restoreStock($id);
             $this->query("UPDATE orders SET status = ? WHERE id = ?", [$newStatus, $id]);
+            if ($order['status'] !== $newStatus) $this->addStatusHistory($id, $newStatus);
             $this->commit();
         } catch (\Throwable $e) {
             $this->rollback();
@@ -240,6 +266,87 @@ class OrderModel extends BaseModel
              FROM orders
              WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
              GROUP BY DATE(created_at) ORDER BY date ASC",
+            [$days]
+        )->fetchAll();
+    }
+
+    // ── Analytics ───────────────────────────────────────────────────────────
+
+    /** Period totals plus the previous period of equal length (for % deltas). */
+    public function analyticsSummary(int $days): array
+    {
+        $cur = $this->query(
+            "SELECT COUNT(*) AS orders,
+                    SUM(payment_status = 'paid') AS paid_orders,
+                    COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total ELSE 0 END), 0) AS revenue
+             FROM orders WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)",
+            [$days]
+        )->fetch();
+
+        $prev = $this->query(
+            "SELECT COUNT(*) AS orders,
+                    COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total ELSE 0 END), 0) AS revenue
+             FROM orders
+             WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+               AND created_at <  DATE_SUB(NOW(), INTERVAL ? DAY)",
+            [$days * 2, $days]
+        )->fetch();
+
+        $units = (int) $this->query(
+            "SELECT COALESCE(SUM(oi.quantity), 0)
+             FROM order_items oi JOIN orders o ON o.id = oi.order_id
+             WHERE o.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)",
+            [$days]
+        )->fetchColumn();
+
+        return [
+            'revenue'      => (float) $cur['revenue'],
+            'orders'       => (int) $cur['orders'],
+            'paid_orders'  => (int) $cur['paid_orders'],
+            'units'        => $units,
+            'prev_revenue' => (float) $prev['revenue'],
+            'prev_orders'  => (int) $prev['orders'],
+        ];
+    }
+
+    public function topProductsByRevenue(int $days, int $limit = 6): array
+    {
+        return $this->query(
+            "SELECT p.id, p.name, p.slug, SUM(oi.quantity) AS units, SUM(oi.total_price) AS revenue
+             FROM order_items oi
+             JOIN orders o   ON o.id = oi.order_id
+             JOIN products p ON p.id = oi.product_id
+             WHERE o.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+             GROUP BY p.id, p.name, p.slug
+             ORDER BY revenue DESC
+             LIMIT ?",
+            [$days, $limit]
+        )->fetchAll();
+    }
+
+    public function revenueByCategory(int $days, int $limit = 6): array
+    {
+        return $this->query(
+            "SELECT c.name AS category, SUM(oi.total_price) AS revenue
+             FROM order_items oi
+             JOIN orders o     ON o.id = oi.order_id
+             JOIN products p   ON p.id = oi.product_id
+             JOIN categories c ON c.id = p.category_id
+             WHERE o.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+             GROUP BY c.id, c.name
+             ORDER BY revenue DESC
+             LIMIT ?",
+            [$days, $limit]
+        )->fetchAll();
+    }
+
+    public function ordersByStatus(int $days): array
+    {
+        return $this->query(
+            "SELECT status, COUNT(*) AS count, COALESCE(SUM(total), 0) AS revenue
+             FROM orders
+             WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+             GROUP BY status",
             [$days]
         )->fetchAll();
     }

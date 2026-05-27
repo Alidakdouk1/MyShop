@@ -39,6 +39,9 @@ if (match_route('/api/auth/forgot-password', $path, $params)) {
 if (match_route('/api/auth/reset-password', $path, $params)) {
     (new AuthController())->resetPassword();
 }
+if (match_route('/api/auth/google', $path, $params)) {
+    (new AuthController())->googleLogin();
+}
 if (match_route('/api/auth/me', $path, $params)) {
     (new AuthController())->me();
 }
@@ -75,6 +78,9 @@ if (match_route('/api/products/{id}/images', $path, $params)) {
 }
 if (match_route('/api/products/{id}/reviews', $path, $params)) {
     if ($method === 'GET') (new ReviewController())->forProduct((int) $params['id']);
+}
+if (match_route('/api/products/{id}/questions', $path, $params)) {
+    if ($method === 'GET') (new QuestionController())->forProduct((int) $params['id']);
 }
 if (match_route('/api/products/{id}/notify-me', $path, $params)) {
     if ($method === 'POST') (new StockNotificationController())->subscribe((int) $params['id']);
@@ -165,6 +171,14 @@ if (match_route('/api/reviews/{id}', $path, $params)) {
     if ($method === 'DELETE') (new ReviewController())->destroy((int) $params['id']);
 }
 
+// ── Product Q&A ──────────────────────────────────────────────
+if (match_route('/api/questions', $path, $params)) {
+    if ($method === 'POST') (new QuestionController())->store();
+}
+if (match_route('/api/questions/{id}', $path, $params)) {
+    if ($method === 'DELETE') (new QuestionController())->destroy((int) $params['id']);
+}
+
 // ── Wishlist ─────────────────────────────────────────────────
 if (match_route('/api/wishlist', $path, $params)) {
     $auth = AuthMiddleware::require();
@@ -217,6 +231,9 @@ if (match_route('/api/admin/dashboard', $path, $params)) {
 }
 if (match_route('/api/admin/abandoned-carts', $path, $params)) {
     if ($method === 'GET') (new AdminController())->abandonedCarts();
+}
+if (match_route('/api/admin/analytics', $path, $params)) {
+    if ($method === 'GET') (new AdminController())->analytics();
 }
 
 // ── Admin — Users ─────────────────────────────────────────────
@@ -335,6 +352,72 @@ if (match_route('/api/admin/homepage-sections/{id}', $path, $params)) {
 if (match_route('/api/admin/homepage-sections', $path, $params)) {
     if ($method === 'GET')  (new AdminController())->getAdminHomepageSections();
     if ($method === 'POST') (new AdminController())->createHomepageSection();
+}
+
+// ── Chat (customer) ───────────────────────────────────────────
+if (match_route('/api/chat/poll', $path, $params)) {
+    (new ChatController())->poll();
+}
+if (match_route('/api/chat/send', $path, $params)) {
+    (new ChatController())->send();
+}
+if (match_route('/api/chat/unread', $path, $params)) {
+    (new ChatController())->unread();
+}
+if (match_route('/api/chat', $path, $params)) {
+    (new ChatController())->myChat();
+}
+
+// ── Currencies (public list) ──────────────────────────────────
+if (match_route('/api/currencies', $path, $params)) {
+    if ($method === 'GET') (new CurrencyController())->index();
+}
+
+// ── Currencies (admin) ────────────────────────────────────────
+if (match_route('/api/admin/currencies', $path, $params)) {
+    if ($method === 'GET')  (new CurrencyController())->adminIndex();
+    if ($method === 'POST') (new CurrencyController())->adminStore();
+}
+if (match_route('/api/admin/currencies/{id}', $path, $params)) {
+    if ($method === 'PUT')    (new CurrencyController())->adminUpdate((int) $params['id']);
+    if ($method === 'DELETE') (new CurrencyController())->adminDestroy((int) $params['id']);
+}
+
+// ── Flash Sales (admin) ───────────────────────────────────────
+if (match_route('/api/admin/flash-sales', $path, $params)) {
+    if ($method === 'GET')  (new FlashSaleController())->adminIndex();
+    if ($method === 'POST') (new FlashSaleController())->adminStore();
+}
+if (match_route('/api/admin/flash-sales/{id}', $path, $params)) {
+    if ($method === 'DELETE') (new FlashSaleController())->adminDestroy((int) $params['id']);
+}
+
+// ── Product Q&A (admin) ───────────────────────────────────────
+// /unread must be matched before the generic {id} route
+if (match_route('/api/admin/questions/unread', $path, $params)) {
+    (new QuestionController())->adminUnread();
+}
+if (match_route('/api/admin/questions', $path, $params)) {
+    if ($method === 'GET') (new QuestionController())->adminIndex();
+}
+if (match_route('/api/admin/questions/{id}', $path, $params)) {
+    if ($method === 'PUT') (new QuestionController())->adminAnswer((int) $params['id']);
+}
+
+// ── Chat (admin) ──────────────────────────────────────────────
+if (match_route('/api/admin/chat/unread', $path, $params)) {
+    (new ChatController())->adminUnread();
+}
+if (match_route('/api/admin/chat/conversations', $path, $params)) {
+    (new ChatController())->adminConversations();
+}
+// {id}/messages must be matched before the generic {id} route
+if (match_route('/api/admin/chat/conversations/{id}/messages', $path, $params)) {
+    if ($method === 'GET')  (new ChatController())->adminMessages((int) $params['id']);
+    if ($method === 'POST') (new ChatController())->adminSend((int) $params['id']);
+}
+if (match_route('/api/admin/chat/conversations/{id}', $path, $params)) {
+    if ($method === 'PUT') (new ChatController())->adminSetStatus((int) $params['id']);
 }
 
 // ── 404 fallback ─────────────────────────────────────────────

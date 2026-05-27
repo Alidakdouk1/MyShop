@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getAdminOrders, updateOrderStatus } from '../../api/adminApi'
+import { getOrder } from '../../api/orderApi'
+import { downloadInvoice } from '../../lib/invoice'
 import { useToast } from '../../hooks/useToast'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
@@ -20,6 +22,7 @@ export default function AdminOrders() {
   const [page, setPage]       = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
+  const [invoicing, setInvoicing] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -39,6 +42,21 @@ export default function AdminOrders() {
       toast.success('Status updated')
     } catch { toast.error('Failed') }
     finally { setUpdating(null) }
+  }
+
+  // The list rows only hold order summaries, so fetch the full order (with items
+  // + address) before building the invoice. Admins are allowed by /api/orders/{id}.
+  const handleInvoice = async (orderId) => {
+    setInvoicing(orderId)
+    try {
+      const { data } = await getOrder(orderId)
+      await downloadInvoice(data.data)
+    } catch (err) {
+      console.error('Admin invoice failed:', err)
+      toast.error(`Could not generate invoice: ${err?.message || ''}`)
+    } finally {
+      setInvoicing(null)
+    }
   }
 
   return (
@@ -66,14 +84,14 @@ export default function AdminOrders() {
             <table className="w-full text-sm">
               <thead className="bg-surface-alt border-b border-border">
                 <tr>
-                  {['Order', 'Customer', 'Total', 'Payment', 'Status', 'Date'].map(h => (
+                  {['Order', 'Customer', 'Total', 'Payment', 'Status', 'Date', 'Invoice'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wide text-ink-tertiary">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {orders.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-10 text-ink-tertiary">No orders found</td></tr>
+                  <tr><td colSpan={7} className="text-center py-10 text-ink-tertiary">No orders found</td></tr>
                 ) : orders.map(o => (
                   <tr key={o.id} className="hover:bg-surface-alt/50 transition-colors">
                     <td className="px-4 py-3 font-bold">#{o.id}</td>
@@ -90,6 +108,20 @@ export default function AdminOrders() {
                       </Select>
                     </td>
                     <td className="px-4 py-3 text-ink-tertiary">{new Date(o.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => handleInvoice(o.id)}
+                        disabled={invoicing === o.id}
+                        title="Download invoice PDF"
+                        className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border text-ink-secondary hover:text-ink hover:border-ink/40 transition-colors disabled:opacity-50"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                        </svg>
+                        {invoicing === o.id ? '…' : 'PDF'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

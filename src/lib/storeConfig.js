@@ -6,6 +6,12 @@ export const STORE_CONFIG = {
   freeShippingThreshold: 50,   // free shipping at/above this subtotal
   flatShippingFee: 8,          // otherwise this flat fee
   taxRate: 0,                  // e.g. 0.08 = 8%; 0 hides the tax line
+  // Your shop's WhatsApp number — digits only, country code first, no "+" or spaces.
+  // Example for Lebanon: '96170123456'. Leave '' to hide all WhatsApp buttons.
+  whatsappNumber: '+96176820617',
+  // Google OAuth Client ID from console.cloud.google.com.
+  // Leave '' to hide the "Continue with Google" button.
+  googleClientId: '15198360813-v2to3e36rubh09scdcp1nbcbrrq4aaf1.apps.googleusercontent.com',
 }
 
 // Compute the order money breakdown from a subtotal + applied discount.

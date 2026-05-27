@@ -189,6 +189,22 @@ class AdminController
         ]);
     }
 
+    public function analytics(): never
+    {
+        method('GET');
+        $this->guard();
+        $days   = in_array((int) ($_GET['days'] ?? 30), [7, 30, 90], true) ? (int) $_GET['days'] : 30;
+        $orders = new OrderModel();
+        success([
+            'days'         => $days,
+            'summary'      => $orders->analyticsSummary($days),
+            'daily'        => $orders->dailySales($days),
+            'top_products' => $orders->topProductsByRevenue($days, 6),
+            'by_category'  => $orders->revenueByCategory($days, 6),
+            'by_status'    => $orders->ordersByStatus($days),
+        ]);
+    }
+
     // ── Abandoned carts ─────────────────────────────────────────────────────
 
     /** GET /api/admin/abandoned-carts?hours=1 — stale registered-user carts. */

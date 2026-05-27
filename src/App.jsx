@@ -42,6 +42,11 @@ const AdminHomepage       = lazy(() => import('./pages/admin/AdminHomepage'))
 const AdminShopPage       = lazy(() => import('./pages/admin/AdminShopPage'))
 const AdminFilters        = lazy(() => import('./pages/admin/AdminFilters'))
 const AdminReturns        = lazy(() => import('./pages/admin/AdminReturns'))
+const AdminChat           = lazy(() => import('./pages/admin/AdminChat'))
+const AdminQuestions      = lazy(() => import('./pages/admin/AdminQuestions'))
+const AdminFlashSales     = lazy(() => import('./pages/admin/AdminFlashSales'))
+const AdminAnalytics      = lazy(() => import('./pages/admin/AdminAnalytics'))
+const AdminCurrencies     = lazy(() => import('./pages/admin/AdminCurrencies'))
 
 function PageFallback() {
   return (
@@ -102,6 +107,11 @@ export default function App() {
         <Route path="/admin/homepage"          element={<ProtectedRoute role="admin"><AdminLayout><AdminHomepage /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/shop"             element={<ProtectedRoute role="admin"><AdminLayout><AdminShopPage /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/returns"          element={<ProtectedRoute role="admin"><AdminLayout><AdminReturns /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/chat"             element={<ProtectedRoute role="admin"><AdminLayout><AdminChat /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/questions"        element={<ProtectedRoute role="admin"><AdminLayout><AdminQuestions /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/flash-sales"      element={<ProtectedRoute role="admin"><AdminLayout><AdminFlashSales /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/analytics"        element={<ProtectedRoute role="admin"><AdminLayout><AdminAnalytics /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/currencies"       element={<ProtectedRoute role="admin"><AdminLayout><AdminCurrencies /></AdminLayout></ProtectedRoute>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>

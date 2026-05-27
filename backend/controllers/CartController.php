@@ -46,7 +46,11 @@ class CartController
         $product  = $products->findById($productId);
         if (!$product || $product['status'] !== 'active') error('Product not available.', 404);
 
-        $price = (float) ($product['sale_price'] ?: $product['base_price']);
+        // Honour an active flash sale: the discounted price is what we snapshot
+        // into the cart, so checkout charges the deal — not the regular price.
+        $flashSale  = (new FlashSaleModel())->activeForProduct($productId);
+        $flashPrice = FlashSaleModel::priceFor($product, $flashSale);
+        $price = $flashPrice ?? (float) ($product['sale_price'] ?: $product['base_price']);
 
         if ($variantId) {
             $allVariants = $products->variants($productId);
