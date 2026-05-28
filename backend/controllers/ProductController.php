@@ -154,6 +154,7 @@ class ProductController
         $product['related']         = $this->attachFlash($product['related']);
         $product['bought_together'] = $this->attachFlash($fbt);
         $product                    = $this->attachFlash([$product])[0];
+        $product['bundles']         = (new BundleModel())->forProduct((int) $product['id']);
 
         success($product);
     }

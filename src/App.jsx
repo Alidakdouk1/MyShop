@@ -47,6 +47,7 @@ const AdminQuestions      = lazy(() => import('./pages/admin/AdminQuestions'))
 const AdminFlashSales     = lazy(() => import('./pages/admin/AdminFlashSales'))
 const AdminAnalytics      = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminCurrencies     = lazy(() => import('./pages/admin/AdminCurrencies'))
+const AdminBundles        = lazy(() => import('./pages/admin/AdminBundles'))
 
 function PageFallback() {
   return (
@@ -112,6 +113,7 @@ export default function App() {
         <Route path="/admin/flash-sales"      element={<ProtectedRoute role="admin"><AdminLayout><AdminFlashSales /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/analytics"        element={<ProtectedRoute role="admin"><AdminLayout><AdminAnalytics /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/currencies"       element={<ProtectedRoute role="admin"><AdminLayout><AdminCurrencies /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/bundles"          element={<ProtectedRoute role="admin"><AdminLayout><AdminBundles /></AdminLayout></ProtectedRoute>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { getOrder, cancelOrder, getReturns, createReturn } from '../../api/orderApi'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useDispatch } from 'react-redux'
+import { getOrder, cancelOrder, getReturns, createReturn, reorderOrder } from '../../api/orderApi'
+import { fetchCart } from '../../store/slices/cartSlice'
 import { useToast } from '../../hooks/useToast'
 import { resolveImg } from '../../lib/img'
 import Spinner from '../../components/ui/Spinner'
@@ -116,8 +118,10 @@ function OrderTimeline({ status, history = [] }) {
 }
 
 export default function OrderDetail() {
-  const { id }  = useParams()
-  const toast   = useToast()
+  const { id }   = useParams()
+  const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const toast    = useToast()
   const [order,      setOrder]      = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [cancelling, setCancelling] = useState(false)
@@ -126,6 +130,7 @@ export default function OrderDetail() {
   const [returnReason,     setReturnReason]     = useState('')
   const [returnSubmitting, setReturnSubmitting] = useState(false)
   const [downloading,      setDownloading]      = useState(false)
+  const [reordering,       setReordering]       = useState(false)
 
   const handleDownloadInvoice = async () => {
     setDownloading(true)
@@ -164,6 +169,29 @@ export default function OrderDetail() {
     } finally {
       setReturnSubmitting(false)
     }
+  }
+
+  const handleReorder = async () => {
+    setReordering(true)
+    try {
+      const { data } = await reorderOrder(id)
+      await dispatch(fetchCart())
+      const added   = data?.data?.added ?? 0
+      const skipped = data?.data?.skipped ?? []
+      if (added === 0) {
+        toast.error(skipped.length
+          ? `Nothing was added — items unavailable: ${skipped.map(s => s.name).join(', ')}`
+          : 'Nothing to re-add.')
+      } else if (skipped.length) {
+        toast.success(`Added ${added} item${added === 1 ? '' : 's'} · skipped ${skipped.length} (${skipped.map(s => s.name).join(', ')})`)
+        navigate('/cart')
+      } else {
+        toast.success(`Added ${added} item${added === 1 ? '' : 's'} to your cart`)
+        navigate('/cart')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not reorder')
+    } finally { setReordering(false) }
   }
 
   const handleCancel = async () => {
@@ -224,7 +252,19 @@ export default function OrderDetail() {
               Placed on {new Date(order.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleReorder}
+              disabled={reordering}
+              className="inline-flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl text-white transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ background: '#0F0F0F' }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {reordering ? 'Adding…' : 'Reorder'}
+            </button>
             <button
               onClick={handleDownloadInvoice}
               disabled={downloading}

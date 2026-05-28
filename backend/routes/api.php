@@ -121,6 +121,9 @@ if (match_route('/api/cart/merge', $path, $params)) {
 if (match_route('/api/cart/items', $path, $params)) {
     if ($method === 'POST') (new CartController())->addItem();
 }
+if (match_route('/api/cart/bundles/{id}', $path, $params)) {
+    if ($method === 'POST') (new CartController())->addBundle((int) $params['id']);
+}
 if (match_route('/api/cart/items/{id}', $path, $params)) {
     if ($method === 'PUT')    (new CartController())->updateItem((int) $params['id']);
     if ($method === 'DELETE') (new CartController())->removeItem((int) $params['id']);
@@ -136,6 +139,9 @@ if (match_route('/api/orders/{id}', $path, $params)) {
 }
 if (match_route('/api/orders/{id}/cancel', $path, $params)) {
     if ($method === 'PUT') (new OrderController())->cancel((int) $params['id']);
+}
+if (match_route('/api/orders/{id}/reorder', $path, $params)) {
+    if ($method === 'POST') (new OrderController())->reorder((int) $params['id']);
 }
 
 // ── Returns / RMA ─────────────────────────────────────────────
@@ -366,6 +372,20 @@ if (match_route('/api/chat/unread', $path, $params)) {
 }
 if (match_route('/api/chat', $path, $params)) {
     (new ChatController())->myChat();
+}
+
+// ── Bundles (public + admin) ──────────────────────────────────
+if (match_route('/api/bundles/{id}', $path, $params)) {
+    if ($method === 'GET') (new BundleController())->show((int) $params['id']);
+}
+if (match_route('/api/admin/bundles', $path, $params)) {
+    if ($method === 'GET')  (new BundleController())->adminIndex();
+    if ($method === 'POST') (new BundleController())->adminStore();
+}
+if (match_route('/api/admin/bundles/{id}', $path, $params)) {
+    if ($method === 'GET')    (new BundleController())->adminShow((int) $params['id']);
+    if ($method === 'PUT')    (new BundleController())->adminUpdate((int) $params['id']);
+    if ($method === 'DELETE') (new BundleController())->adminDestroy((int) $params['id']);
 }
 
 // ── Currencies (public list) ──────────────────────────────────

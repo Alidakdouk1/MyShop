@@ -87,6 +87,81 @@ class CartController
         success(['cart_id' => $cart['id'], 'items' => $items, 'total' => round($total, 2)], 'Item added to cart.', 201);
     }
 
+    /**
+     * Add every product in a bundle to the cart at proportionally-adjusted
+     * prices so the line totals add up to the bundle price. The discount flows
+     * through to checkout via the snapshot price.
+     */
+    public function addBundle(int $bundleId): never
+    {
+        method('POST');
+        $cart    = $this->getCart();
+        $bundles = new BundleModel();
+        $bundle  = $bundles->findById($bundleId);
+        if (!$bundle || (int) $bundle['is_active'] !== 1) error('Bundle not found.', 404);
+
+        $items = $bundles->itemsForBundle($bundleId);
+        if (count($items) < 2) error('This bundle is incomplete.', 422);
+
+        // Only simple, in-stock products are eligible for one-click bundle add.
+        foreach ($items as $it) {
+            if ((int) $it['variant_count'] > 0) error("\"{$it['name']}\" has variants and can't be added via the bundle button.", 422);
+            if ((int) $it['stock_qty']     <= 0) error("\"{$it['name']}\" is out of stock.", 422);
+        }
+
+        // Effective regular price per item (honour active flash sale).
+        $flashModel = new FlashSaleModel();
+        $regularTotal = 0.0;
+        $perItem      = [];
+        foreach ($items as $it) {
+            $sale  = $flashModel->activeForProduct((int) $it['id']);
+            $flash = FlashSaleModel::priceFor($it, $sale);
+            $eff   = $flash !== null ? $flash : (float) ($it['sale_price'] ?: $it['base_price']);
+            $perItem[] = ['id' => (int) $it['id'], 'name' => $it['name'], 'eff' => $eff];
+            $regularTotal += $eff;
+        }
+
+        $bundlePrice = (float) $bundle['bundle_price'];
+        // Don't let the "bundle" cost more than buying the items normally.
+        $bundlePrice = min($bundlePrice, $regularTotal);
+        $ratio       = $regularTotal > 0 ? $bundlePrice / $regularTotal : 1.0;
+
+        // Compute per-item snapshot prices, then absorb the rounding remainder
+        // into the last line so the sum is exactly the bundle price.
+        $snapshots = [];
+        $accum     = 0.0;
+        $n = count($perItem);
+        foreach ($perItem as $i => $pi) {
+            $snap = ($i === $n - 1)
+                ? round($bundlePrice - $accum, 2)
+                : round($pi['eff'] * $ratio, 2);
+            $snapshots[] = $snap;
+            $accum      += $snap;
+        }
+
+        $products = new ProductModel();
+        $this->carts->begin();
+        try {
+            foreach ($perItem as $i => $pi) {
+                // Match CartController::addItem stock rule for non-variant simple adds.
+                $inCart   = $this->carts->getItemQuantity((int) $cart['id'], $pi['id'], null);
+                $product  = $products->findById($pi['id']);
+                if ((int) $product['stock_qty'] < $inCart + 1) {
+                    throw new RuntimeException("Sorry, \"{$pi['name']}\" just went out of stock.");
+                }
+                $this->carts->addItem((int) $cart['id'], $pi['id'], null, 1, $snapshots[$i], []);
+            }
+            $this->carts->commit();
+        } catch (\Throwable $e) {
+            $this->carts->rollback();
+            error($e->getMessage(), 409);
+        }
+
+        $items = $this->carts->items((int) $cart['id']);
+        $total = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
+        success(['cart_id' => $cart['id'], 'items' => $items, 'total' => round($total, 2)], 'Bundle added to cart.', 201);
+    }
+
     public function updateItem(int $itemId): never
     {
         method('PUT');

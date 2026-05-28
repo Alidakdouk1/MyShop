@@ -88,6 +88,24 @@ class OrderModel extends BaseModel
         return $order;
     }
 
+    /** Each item with its picked filter-option ids — used by the reorder flow. */
+    public function itemsWithOptions(int $orderId): array
+    {
+        $items = $this->query(
+            "SELECT id, product_id, variant_id, quantity, product_name_snapshot
+             FROM order_items WHERE order_id = ?",
+            [$orderId]
+        )->fetchAll();
+        foreach ($items as &$it) {
+            $rows = $this->query(
+                "SELECT filter_option_id FROM order_item_options WHERE order_item_id = ?",
+                [(int) $it['id']]
+            )->fetchAll();
+            $it['option_ids'] = array_map(fn($r) => (int) $r['filter_option_id'], $rows);
+        }
+        return $items;
+    }
+
     public function forUser(int $userId, int $limit, int $offset, string $status = ''): array
     {
         $where  = $status ? "o.user_id = ? AND o.status = ?" : "o.user_id = ?";

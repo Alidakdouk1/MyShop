@@ -13,6 +13,7 @@ import StarRating from '../components/common/StarRating'
 import Spinner from '../components/ui/Spinner'
 import ProductCard from '../components/product/ProductCard'
 import FrequentlyBoughtTogether from '../components/product/FrequentlyBoughtTogether'
+import BundleCard from '../components/product/BundleCard'
 import FlashCountdown from '../components/product/FlashCountdown'
 import Seo from '../components/common/Seo'
 import { getRecentlyViewed, addRecentlyViewed } from '../lib/recentlyViewed'
@@ -104,6 +105,7 @@ export default function ProductDetail() {
   const [tab, setTab]             = useState('description')
   const [related, setRelated]     = useState([])
   const [boughtTogether, setBoughtTogether] = useState([])
+  const [bundles, setBundles]               = useState([])
   const [recentlyViewed, setRecentlyViewed] = useState([])
   const [zoom, setZoom]           = useState({ on: false, x: 50, y: 50 })
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -119,6 +121,7 @@ export default function ProductDetail() {
     setLoading(true)
     setRelated([])
     setBoughtTogether([])
+    setBundles([])
     setImgLoaded(false)
     setProductFilters([])
     setPickedFilters({})
@@ -143,6 +146,7 @@ export default function ProductDetail() {
       }
       setRelated(Array.isArray(p.related) ? p.related : [])
       setBoughtTogether(Array.isArray(p.bought_together) ? p.bought_together : [])
+      setBundles(Array.isArray(p.bundles) ? p.bundles : [])
       addRecentlyViewed(p)
     }).catch(() => navigate('/not-found', { replace: true }))
       .finally(() => setLoading(false))
@@ -872,6 +876,33 @@ export default function ProductDetail() {
           </div>
         </div>
       </div>
+
+      {/* ── Bundle Deals ──────────────────────────────────── */}
+      {bundles.length > 0 && (
+        <div style={{ maxWidth: 1280, margin: '8px auto 0', padding: '0 20px' }}>
+          <div style={{ borderTop: '1px solid #E4E1D9', paddingTop: 48 }}>
+            <p style={{
+              fontSize: 10, fontWeight: 600, letterSpacing: '0.25em',
+              textTransform: 'uppercase', color: '#9C9894', marginBottom: 6,
+            }}>
+              Save With a Bundle
+            </p>
+            <h2 style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: 'clamp(1.8rem, 3vw, 2.8rem)',
+              fontWeight: 400, letterSpacing: '0.03em',
+              color: '#0F0F0F', margin: '0 0 24px', lineHeight: 1,
+            }}>
+              {bundles.length === 1 ? 'Bundle Deal' : 'Bundle Deals'}
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {bundles.map(b => (
+                <BundleCard key={b.id} bundle={b} currentProductId={product.id} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Frequently Bought Together ────────────────────── */}
       <FrequentlyBoughtTogether

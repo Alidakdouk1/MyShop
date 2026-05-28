@@ -101,6 +101,14 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/bundles', label: 'Bundles',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M10 1l8 4v10l-8 4-8-4V5l8-4zm0 2.2L4.85 5.7 10 8.2l5.15-2.5L10 3.2zM4 7.42v6.92l5 2.5V9.92L4 7.42zm7 9.42l5-2.5V7.42l-5 2.5v6.92z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/flash-sales', label: 'Flash Sales',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">

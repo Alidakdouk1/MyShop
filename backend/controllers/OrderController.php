@@ -175,6 +175,84 @@ class OrderController
         success(null, 'Order cancelled.');
     }
 
+    /**
+     * Re-add every item from a past order to the current cart. Skips items that
+     * are no longer purchasable (deleted, archived, out of stock, missing
+     * variant/option) and reports them so the customer knows what wasn't added.
+     */
+    public function reorder(int $id): never
+    {
+        method('POST');
+        $auth  = AuthMiddleware::require();
+        $order = $this->orders->findById($id);
+        if (!$order) error('Order not found.', 404);
+        if ($auth['role'] !== 'admin' && (int) $order['user_id'] !== (int) $auth['sub']) {
+            error('Forbidden.', 403);
+        }
+
+        $items    = $this->orders->itemsWithOptions($id);
+        if (!$items) error('Order has no items.', 422);
+
+        $products = new ProductModel();
+        $filters  = new FilterModel();
+        $cart     = $this->carts->getOrCreate((int) $auth['sub'], null);
+
+        $added   = 0;
+        $skipped = [];
+
+        foreach ($items as $it) {
+            $pid     = (int) $it['product_id'];
+            $qty     = (int) $it['quantity'];
+            $vid     = $it['variant_id'] ? (int) $it['variant_id'] : null;
+            $opts    = $it['option_ids'] ?? [];
+            $product = $products->findById($pid);
+            $name    = $product['name'] ?? $it['product_name_snapshot'];
+
+            if (!$product || $product['status'] !== 'active') {
+                $skipped[] = ['name' => $name, 'reason' => 'no longer available'];
+                continue;
+            }
+
+            // Today's price (honours active flash sale) — same rule as addItem.
+            $flashSale  = (new FlashSaleModel())->activeForProduct($pid);
+            $flashPrice = FlashSaleModel::priceFor($product, $flashSale);
+            $price      = $flashPrice ?? (float) ($product['sale_price'] ?: $product['base_price']);
+
+            if ($vid) {
+                $variant = current(array_filter(
+                    $products->variants($pid),
+                    fn($v) => (int) $v['id'] === $vid
+                )) ?: null;
+                if (!$variant) { $skipped[] = ['name' => $name, 'reason' => 'variant no longer exists']; continue; }
+                $inCart = $this->carts->getItemQuantity((int) $cart['id'], $pid, $vid);
+                if ((int) $variant['stock_qty'] < $inCart + $qty) {
+                    $skipped[] = ['name' => $name, 'reason' => 'out of stock']; continue;
+                }
+                $price += (float) $variant['price_modifier'];
+            } elseif (!empty($opts)) {
+                $stocks = $filters->optionQuantities($pid, $opts);
+                $bad = false;
+                foreach ($opts as $oid) {
+                    if (!isset($stocks[$oid])) continue;
+                    $stock     = $stocks[$oid];
+                    $inCartOpt = $this->carts->qtyInCartForOption((int) $cart['id'], $pid, (int) $oid);
+                    if ($stock < ($inCartOpt + $qty)) { $bad = true; break; }
+                }
+                if ($bad) { $skipped[] = ['name' => $name, 'reason' => 'option out of stock']; continue; }
+            } else {
+                $inCart = $this->carts->getItemQuantity((int) $cart['id'], $pid, null);
+                if ((int) $product['stock_qty'] < $inCart + $qty) {
+                    $skipped[] = ['name' => $name, 'reason' => 'out of stock']; continue;
+                }
+            }
+
+            $this->carts->addItem((int) $cart['id'], $pid, $vid, $qty, $price, $opts);
+            $added++;
+        }
+
+        success(['added' => $added, 'skipped' => $skipped], $added > 0 ? 'Items added to cart.' : 'No items could be re-added.');
+    }
+
     public function vendorOrders(): never
     {
         method('GET');
