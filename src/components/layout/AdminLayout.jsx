@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { logoutThunk } from '../../store/slices/authSlice'
 import { getAdminChatUnread } from '../../api/chatApi'
 import { getAdminQuestionsUnread } from '../../api/questionApi'
+import { getAdminDashboard } from '../../api/adminApi'
 import ToastContainer from '../ui/Toast'
 
 const NAV = [
@@ -32,6 +33,14 @@ const NAV = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
         <path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/low-stock', label: 'Low Stock',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
       </svg>
     ),
   },
@@ -68,6 +77,22 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/whish', label: 'Whish Money',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/bank-transfer', label: 'Bank Transfer',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M10 1.5 1 6v1h18V6L10 1.5zM3 8v6h2V8H3zm4 0v6h2V8H7zm4 0v6h2V8h-2zm4 0v6h2V8h-2zM1 16v2h18v-2H1z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/orders', label: 'Orders',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -81,6 +106,14 @@ const NAV = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
         <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.84 8.84 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zm-4 0H9v2h2V9z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/reviews', label: 'Reviews',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.957a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.366 2.446a1 1 0 00-.364 1.118l1.286 3.957c.3.921-.755 1.688-1.54 1.118l-3.366-2.446a1 1 0 00-1.176 0l-3.366 2.446c-.784.57-1.838-.197-1.539-1.118l1.286-3.957a1 1 0 00-.364-1.118L2.013 9.384c-.783-.57-.38-1.81.588-1.81h4.162a1 1 0 00.95-.69l1.286-3.957z" />
       </svg>
     ),
   },
@@ -133,6 +166,23 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/newsletter-popup', label: 'Welcome Popup',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+        <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/activity', label: 'Activity Ticker',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .2.08.4.22.53l3 3a.75.75 0 101.06-1.06l-2.78-2.78V5z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/shop', label: 'Shop Page',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -149,6 +199,7 @@ export default function AdminLayout({ children }) {
   const [sideOpen, setSideOpen] = useState(false)
   const [chatUnread, setChatUnread] = useState(0)
   const [qaUnread, setQaUnread]     = useState(0)
+  const [lowStockCount, setLowStockCount] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -159,9 +210,14 @@ export default function AdminLayout({ children }) {
       getAdminQuestionsUnread()
         .then(r => { if (alive) setQaUnread(r.data.data.unread || 0) })
         .catch(() => {})
+      // The dashboard payload includes low_stock_count — cheap to piggyback on so
+      // we don't add a new poll.
+      getAdminDashboard()
+        .then(r => { if (alive) setLowStockCount(r.data.data?.low_stock_count || 0) })
+        .catch(() => {})
     }
     tick()
-    const iv = setInterval(tick, 15000)
+    const iv = setInterval(tick, 30000)
     return () => { alive = false; clearInterval(iv) }
   }, [])
 
@@ -253,12 +309,15 @@ export default function AdminLayout({ children }) {
                   {item.label}
                   {(() => {
                     const badge = item.to === '/admin/chat' ? chatUnread
-                                : item.to === '/admin/questions' ? qaUnread : 0
+                                : item.to === '/admin/questions' ? qaUnread
+                                : item.to === '/admin/low-stock' ? lowStockCount : 0
                     return badge > 0
                   })() ? (
                     <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center" style={{ background: '#C0392B' }}>
                       {(() => {
-                        const badge = item.to === '/admin/chat' ? chatUnread : qaUnread
+                        const badge = item.to === '/admin/chat' ? chatUnread
+                                    : item.to === '/admin/questions' ? qaUnread
+                                    : lowStockCount
                         return badge > 9 ? '9+' : badge
                       })()}
                     </span>

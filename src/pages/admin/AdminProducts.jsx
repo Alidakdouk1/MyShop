@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getAdminProducts, adminDeleteProduct, exportProductsCsv, importProductsCsv } from '../../api/adminApi'
+import { getAdminProducts, adminDeleteProduct, adminUpdateProduct, exportProductsCsv, importProductsCsv, getProductStats, bulkProductAction } from '../../api/adminApi'
 import { getCategoriesFlat } from '../../api/productApi'
 import { resolveImg } from '../../lib/img'
 import { useToast } from '../../hooks/useToast'
@@ -27,12 +27,19 @@ export default function AdminProducts() {
   const [deleting,    setDeleting]    = useState(null)
   const [view,        setView]        = useState('table') // 'table' | 'grid'
   const [importing,   setImporting]   = useState(false)
+  const [stats,       setStats]       = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [edit,        setEdit]        = useState(null)   // { id, field, value }
+  const [bulkBusy,    setBulkBusy]    = useState(false)
   const fileRef = useRef(null)
+
+  const loadStats = () => getProductStats().then(r => setStats(r.data.data)).catch(() => {})
 
   useEffect(() => {
     getCategoriesFlat()
       .then(r => setCategories(r.data.data || []))
       .catch(() => {})
+    loadStats()
   }, [])
 
   const parents  = categories.filter(c => !c.parent_id)
@@ -102,9 +109,59 @@ export default function AdminProducts() {
     if (!confirm(`Permanently delete "${name}"?`)) return
     setDeleting(id)
     try {
-      await adminDeleteProduct(id); toast.success('Product deleted'); load()
+      await adminDeleteProduct(id); toast.success('Product deleted'); load(); loadStats()
     } catch { toast.error('Cannot delete this product') }
     finally { setDeleting(null) }
+  }
+
+  // Selection helpers
+  const toggleOne = (id) => setSelectedIds(s => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  const allOnPageSelected = products.length > 0 && products.every(p => selectedIds.has(p.id))
+  const toggleAllOnPage = () => setSelectedIds(s => {
+    const n = new Set(s)
+    if (allOnPageSelected) products.forEach(p => n.delete(p.id))
+    else                   products.forEach(p => n.add(p.id))
+    return n
+  })
+
+  const runBulk = async (action) => {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+    if (action === 'delete' && !confirm(`Permanently delete ${ids.length} product${ids.length === 1 ? '' : 's'}?`)) return
+    setBulkBusy(true)
+    try {
+      const { data } = await bulkProductAction(ids, action)
+      toast.success(data?.message || 'Done')
+      setSelectedIds(new Set())
+      load(); loadStats()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk action failed')
+    } finally { setBulkBusy(false) }
+  }
+
+  // Inline edit (price / stock)
+  const startEdit = (id, field, value) => setEdit({ id, field, value: String(value ?? '') })
+  const cancelEdit = () => setEdit(null)
+  const saveEdit = async () => {
+    if (!edit) return
+    const num = Number(edit.value)
+    if (!Number.isFinite(num) || num < 0) { toast.error('Enter a valid number'); return }
+    const patch = edit.field === 'price' ? { base_price: num } : { stock_qty: Math.floor(num) }
+    try {
+      await adminUpdateProduct(edit.id, patch)
+      setProducts(list => list.map(p => p.id === edit.id ? { ...p, ...patch } : p))
+      loadStats()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not save')
+    } finally {
+      setEdit(null)
+    }
+  }
+  const onEditKey = (e) => {
+    if (e.key === 'Enter')   { e.preventDefault(); saveEdit() }
+    if (e.key === 'Escape')  { e.preventDefault(); cancelEdit() }
   }
 
   return (
@@ -149,6 +206,41 @@ export default function AdminProducts() {
           </button>
         </div>
       </div>
+
+      {/* Quick stats */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+          {[
+            { label: 'Total',          value: stats.total,           accent: '#0F0F0F' },
+            { label: 'Active',         value: stats.active,          accent: '#16A34A' },
+            { label: 'Drafts',         value: stats.drafts,          accent: '#9C9894' },
+            { label: 'Low stock',      value: stats.low_stock,       accent: '#D97706' },
+            { label: 'Out of stock',   value: stats.out_of_stock,    accent: '#C0392B' },
+            { label: 'Inventory value', value: `$${Number(stats.inventory_value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`, accent: '#0284C7' },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl p-3.5" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#9C9894' }}>{s.label}</p>
+              <p className="text-xl font-black mt-1" style={{ color: s.accent, fontVariantNumeric: 'tabular-nums' }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky top-4 z-30 mb-4 rounded-2xl flex items-center gap-2 flex-wrap p-3" style={{ background: '#0F0F0F', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,0.18)' }}>
+          <span className="text-sm font-bold pl-2">{selectedIds.size} selected</span>
+          <button onClick={() => setSelectedIds(new Set())} className="text-xs font-semibold opacity-70 hover:opacity-100 px-2">Clear</button>
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            <button onClick={() => runBulk('activate')}  disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(22,163,74,0.15)',  color: '#86EFAC' }}>Activate</button>
+            <button onClick={() => runBulk('draft')}     disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>Set Draft</button>
+            <button onClick={() => runBulk('archive')}   disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(156,152,148,0.2)', color: '#D4D0CB' }}>Archive</button>
+            <button onClick={() => runBulk('feature')}   disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(184,146,46,0.2)',  color: '#F5D77F' }}>Feature</button>
+            <button onClick={() => runBulk('unfeature')} disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>Unfeature</button>
+            <button onClick={() => runBulk('delete')}    disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(192,57,43,0.25)', color: '#FCA5A5' }}>Delete</button>
+          </div>
+        </div>
+      )}
 
       {/* Category filter — row 1: parent categories */}
       {parents.length > 0 && (
@@ -270,6 +362,15 @@ export default function AdminProducts() {
             <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', background: '#FAFAF8' }}>
+                  <th className="px-4 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      onChange={toggleAllOnPage}
+                      className="accent-ink w-4 h-4 cursor-pointer"
+                      aria-label="Select all on page"
+                    />
+                  </th>
                   {['Product', 'SKU', 'Price', 'Stock', 'Status', 'Actions'].map(h => (
                     <th key={h} className="text-left px-5 py-3 text-[11px] font-bold tracking-[0.12em] uppercase" style={{ color: '#9C9894' }}>{h}</th>
                   ))}
@@ -287,6 +388,15 @@ export default function AdminProducts() {
                       onMouseEnter={e => e.currentTarget.style.background = '#F9F8F6'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
+                      <td className="px-4 py-3.5 w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(p.id)}
+                          onChange={() => toggleOne(p.id)}
+                          className="accent-ink w-4 h-4 cursor-pointer"
+                          aria-label={`Select ${p.name}`}
+                        />
+                      </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 flex items-center justify-center" style={{ background: '#F0EEE9' }}>
@@ -307,18 +417,47 @@ export default function AdminProducts() {
                         <span className="font-mono text-xs px-2 py-1 rounded-lg" style={{ background: '#F0EEE9', color: '#5C5854' }}>{p.sku}</span>
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="font-bold text-sm" style={{ color: '#0F0F0F' }}>${price.toFixed(2)}</span>
+                        {edit && edit.id === p.id && edit.field === 'price' ? (
+                          <input
+                            autoFocus type="number" min="0" step="0.01"
+                            value={edit.value}
+                            onChange={e => setEdit({ ...edit, value: e.target.value })}
+                            onBlur={saveEdit}
+                            onKeyDown={onEditKey}
+                            className="w-24 px-2 py-1 text-sm rounded-lg outline-none border"
+                            style={{ borderColor: '#0F0F0F' }}
+                          />
+                        ) : (
+                          <button
+                            onClick={() => startEdit(p.id, 'price', p.base_price)}
+                            className="font-bold text-sm hover:underline cursor-pointer"
+                            style={{ color: '#0F0F0F' }}
+                            title="Click to edit base price"
+                          >${Number(p.base_price).toFixed(2)}</button>
+                        )}
                         {p.sale_price && (
                           <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: '#FEF2F2', color: '#C0392B' }}>SALE</span>
                         )}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span
-                          className="font-bold text-sm"
-                          style={{ color: p.stock_qty === 0 ? '#C0392B' : p.stock_qty <= 5 ? '#D97706' : '#0F0F0F' }}
-                        >
-                          {p.stock_qty}
-                        </span>
+                        {edit && edit.id === p.id && edit.field === 'stock' ? (
+                          <input
+                            autoFocus type="number" min="0"
+                            value={edit.value}
+                            onChange={e => setEdit({ ...edit, value: e.target.value })}
+                            onBlur={saveEdit}
+                            onKeyDown={onEditKey}
+                            className="w-20 px-2 py-1 text-sm rounded-lg outline-none border"
+                            style={{ borderColor: '#0F0F0F' }}
+                          />
+                        ) : (
+                          <button
+                            onClick={() => startEdit(p.id, 'stock', p.stock_qty)}
+                            className="font-bold text-sm hover:underline cursor-pointer"
+                            style={{ color: p.stock_qty === 0 ? '#C0392B' : p.stock_qty <= 5 ? '#D97706' : '#0F0F0F' }}
+                            title="Click to edit stock"
+                          >{p.stock_qty}</button>
+                        )}
                       </td>
                       <td className="px-5 py-3.5">
                         <span

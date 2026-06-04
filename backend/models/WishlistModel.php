@@ -18,23 +18,44 @@ class WishlistModel extends BaseModel
         )->fetchAll();
     }
 
+    /**
+     * Idempotent add: if the row already exists, return that row instead of
+     * failing on the UNIQUE constraint. The frontend toggle calls add() in
+     * cases where state is stale; this keeps the API friendly.
+     */
     public function add(int $userId, int $productId): ?array
     {
-        try {
-            $this->query("INSERT INTO wishlists (user_id, product_id) VALUES (?, ?)", [$userId, $productId]);
-            $id = $this->lastId();
-            return $this->query(
-                "SELECT w.id, w.created_at, p.id AS product_id, p.name, p.slug,
-                        p.base_price, p.sale_price, p.stock_qty,
-                        (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image
-                 FROM wishlists w
-                 JOIN products p ON p.id = w.product_id
-                 WHERE w.id = ?",
-                [$id]
-            )->fetch() ?: null;
-        } catch (PDOException) {
-            return null;
+        $existing = $this->query(
+            "SELECT id FROM wishlists WHERE user_id = ? AND product_id = ? LIMIT 1",
+            [$userId, $productId]
+        )->fetch();
+
+        if ($existing) {
+            $id = (int) $existing['id'];
+        } else {
+            try {
+                $this->query("INSERT INTO wishlists (user_id, product_id) VALUES (?, ?)", [$userId, $productId]);
+                $id = $this->lastId();
+            } catch (PDOException) {
+                // Race with another tab — fall back to re-fetching the existing row.
+                $row = $this->query(
+                    "SELECT id FROM wishlists WHERE user_id = ? AND product_id = ? LIMIT 1",
+                    [$userId, $productId]
+                )->fetch();
+                if (!$row) return null;
+                $id = (int) $row['id'];
+            }
         }
+
+        return $this->query(
+            "SELECT w.id, w.created_at, p.id AS product_id, p.name, p.slug,
+                    p.base_price, p.sale_price, p.stock_qty,
+                    (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image
+             FROM wishlists w
+             JOIN products p ON p.id = w.product_id
+             WHERE w.id = ?",
+            [$id]
+        )->fetch() ?: null;
     }
 
     public function remove(int $id, int $userId): bool

@@ -213,7 +213,10 @@ export default function Profile() {
   }
 
   const openAddrModal = (addr = null) => {
-    setAddrForm(addr ? { ...addr } : { full_name: user?.name || '', phone: user?.phone || '', address_line1: '', city: '', state: '', zip: '', country: '', is_default: false })
+    setAddrForm(addr ? { ...addr } : {
+      label: 'Home', recipient_name: user?.name || '', phone: user?.phone || '',
+      street: '', city: '', state: '', zip: '', country: '', is_default: false,
+    })
     setAddrModal(addr ? 'edit' : 'new')
   }
 
@@ -481,10 +484,13 @@ export default function Profile() {
                           </svg>
                         </div>
 
-                        <p style={{ fontWeight: 700, fontSize: 14, color: '#0F0F0F', margin: '0 0 4px' }}>{a.full_name}</p>
+                        <p style={{ fontWeight: 700, fontSize: 14, color: '#0F0F0F', margin: '0 0 4px' }}>
+                          {a.recipient_name || '—'}
+                          {a.label && <span style={{ marginLeft: 8, fontSize: 11, color: '#9C9894', fontWeight: 600 }}>· {a.label}</span>}
+                        </p>
                         {a.phone && <p style={{ fontSize: 12, color: '#9C9894', margin: '0 0 10px' }}>{a.phone}</p>}
                         <p style={{ fontSize: 13, color: '#5C5854', lineHeight: 1.6, margin: 0 }}>
-                          {a.address_line1}<br />
+                          {a.street}<br />
                           {a.city}{a.state ? `, ${a.state}` : ''} {a.zip}<br />
                           {a.country}
                         </p>
@@ -548,18 +554,19 @@ export default function Profile() {
             </div>
 
             <form onSubmit={saveAddress} style={{ display: 'grid', gap: 16 }}>
+              <Field label="Label" value={addrForm.label || ''} onChange={e => setAddrForm(f => ({ ...f, label: e.target.value }))} placeholder="Home, Work, Mom's place…" />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="Full Name" value={addrForm.full_name || ''} onChange={e => setAddrForm(f => ({ ...f, full_name: e.target.value }))} required />
+                <Field label="Recipient Name" value={addrForm.recipient_name || ''} onChange={e => setAddrForm(f => ({ ...f, recipient_name: e.target.value }))} required />
                 <Field label="Phone" type="tel" value={addrForm.phone || ''} onChange={e => setAddrForm(f => ({ ...f, phone: e.target.value }))} />
               </div>
-              <Field label="Street Address" value={addrForm.address_line1 || ''} onChange={e => setAddrForm(f => ({ ...f, address_line1: e.target.value }))} required />
+              <Field label="Street Address" value={addrForm.street || ''} onChange={e => setAddrForm(f => ({ ...f, street: e.target.value }))} required />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="City" value={addrForm.city || ''} onChange={e => setAddrForm(f => ({ ...f, city: e.target.value }))} required />
                 <Field label="State / Province" value={addrForm.state || ''} onChange={e => setAddrForm(f => ({ ...f, state: e.target.value }))} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="ZIP / Postal Code" value={addrForm.zip || ''} onChange={e => setAddrForm(f => ({ ...f, zip: e.target.value }))} required />
-                <Field label="Country" value={addrForm.country || ''} onChange={e => setAddrForm(f => ({ ...f, country: e.target.value }))} />
+                <Field label="ZIP / Postal Code" value={addrForm.zip || ''} onChange={e => setAddrForm(f => ({ ...f, zip: e.target.value }))} />
+                <Field label="Country" value={addrForm.country || ''} onChange={e => setAddrForm(f => ({ ...f, country: e.target.value }))} required />
               </div>
 
               {/* Default toggle */}

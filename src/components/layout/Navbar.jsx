@@ -13,6 +13,8 @@ import SearchBar from './SearchBar'
 import MobileSearchOverlay from './MobileSearchOverlay'
 import CurrencyPicker from './CurrencyPicker'
 import { useCurrency } from '../../context/CurrencyContext'
+import FreeShippingNudge from '../cart/FreeShippingNudge'
+import CartRecommendations from '../cart/CartRecommendations'
 
 const DEFAULT_ANNOUNCE = [
   { icon: '🚚', text: 'Free Shipping',  show_icon: true },
@@ -502,7 +504,12 @@ function CartDrawer() {
         </div>
 
         {cartItems.length > 0 && (
+          <CartRecommendations variant="drawer" onItemAdded={() => dispatch(toggleCart())} />
+        )}
+
+        {cartItems.length > 0 && (
           <div className="px-6 py-5 border-t border-border space-y-3 pb-safe">
+            <FreeShippingNudge total={total} />
             <div className="flex items-center justify-between">
               <span className="font-semibold text-ink">Subtotal</span>
               <span className="text-xl font-bold text-ink">{format(total)}</span>

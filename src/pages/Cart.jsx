@@ -9,6 +9,8 @@ import { useCurrency } from '../context/CurrencyContext'
 import { resolveImg } from '../lib/img'
 import { waLink, cartWhatsAppMessage, whatsappEnabled } from '../lib/whatsapp'
 import Button from '../components/ui/Button'
+import FreeShippingNudge from '../components/cart/FreeShippingNudge'
+import CartRecommendations from '../components/cart/CartRecommendations'
 
 export default function Cart() {
   const dispatch  = useDispatch()
@@ -28,7 +30,7 @@ export default function Cart() {
   )
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-10">
+    <div className="max-w-screen-xl mx-auto px-4 py-10 animate-page-in">
       <h1 className="hero-display text-5xl text-ink mb-8 tracking-wide">SHOPPING CART</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -100,7 +102,8 @@ export default function Cart() {
         {/* Order summary */}
         <div className="lg:col-span-1">
           <div className="bg-surface border border-border rounded-2xl p-6 sticky top-24">
-            <h2 className="font-bold text-ink text-lg mb-5">Order Summary</h2>
+            <h2 className="font-bold text-ink text-lg mb-4">Order Summary</h2>
+            <div className="mb-4"><FreeShippingNudge total={total} /></div>
             <div className="space-y-3 mb-5">
               <Row label="Subtotal" value={format(total)} />
               <Row label="Shipping" value="Calculated at checkout" small />
@@ -143,6 +146,9 @@ export default function Cart() {
           </div>
         </div>
       </div>
+
+      {/* Cross-sell rail */}
+      <CartRecommendations variant="page" />
     </div>
   )
 }

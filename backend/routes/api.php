@@ -82,6 +82,9 @@ if (match_route('/api/products/{id}/reviews', $path, $params)) {
 if (match_route('/api/products/{id}/questions', $path, $params)) {
     if ($method === 'GET') (new QuestionController())->forProduct((int) $params['id']);
 }
+if (match_route('/api/products/{id}/reviewability', $path, $params)) {
+    if ($method === 'GET') (new ReviewController())->reviewability((int) $params['id']);
+}
 if (match_route('/api/products/{id}/notify-me', $path, $params)) {
     if ($method === 'POST') (new StockNotificationController())->subscribe((int) $params['id']);
 }
@@ -114,6 +117,12 @@ if (match_route('/api/filter-options/{id}', $path, $params)) {
 if (match_route('/api/cart', $path, $params)) {
     if ($method === 'GET')    (new CartController())->index();
     if ($method === 'DELETE') (new CartController())->clear();
+}
+if (match_route('/api/cart/recommendations', $path, $params)) {
+    if ($method === 'GET') (new CartController())->recommendations();
+}
+if (match_route('/api/cart/upsell', $path, $params)) {
+    if ($method === 'GET') (new CartController())->upsell();
 }
 if (match_route('/api/cart/merge', $path, $params)) {
     (new CartController())->merge();
@@ -176,6 +185,9 @@ if (match_route('/api/reviews', $path, $params)) {
 if (match_route('/api/reviews/{id}', $path, $params)) {
     if ($method === 'DELETE') (new ReviewController())->destroy((int) $params['id']);
 }
+if (match_route('/api/reviews/{id}/photos', $path, $params)) {
+    if ($method === 'POST') (new ReviewController())->uploadPhoto((int) $params['id']);
+}
 
 // ── Product Q&A ──────────────────────────────────────────────
 if (match_route('/api/questions', $path, $params)) {
@@ -227,8 +239,37 @@ if (match_route('/sitemap.xml', $path, $params)) {
 if (match_route('/api/newsletter/subscribe', $path, $params)) {
     if ($method === 'POST') (new NewsletterController())->subscribe();
 }
+if (match_route('/api/newsletter/popup', $path, $params)) {
+    if ($method === 'GET') (new NewsletterController())->popupConfig();
+}
+if (match_route('/api/newsletter/welcome-discount', $path, $params)) {
+    if ($method === 'POST') (new NewsletterController())->welcomeDiscount();
+}
 if (match_route('/api/admin/newsletter', $path, $params)) {
     if ($method === 'GET') (new NewsletterController())->adminIndex();
+}
+if (match_route('/api/admin/newsletter/popup', $path, $params)) {
+    if ($method === 'GET') (new NewsletterController())->adminGetPopup();
+    if ($method === 'PUT') (new NewsletterController())->adminUpdatePopup();
+}
+
+// ── Payment: bank transfer ────────────────────────────────────
+if (match_route('/api/payment/bank-transfer', $path, $params)) {
+    if ($method === 'GET') (new PaymentController())->bankTransferPublic();
+}
+if (match_route('/api/admin/payment/bank-transfer', $path, $params)) {
+    if ($method === 'GET') (new PaymentController())->adminGetBankTransfer();
+    if ($method === 'PUT') (new PaymentController())->adminUpdateBankTransfer();
+}
+if (match_route('/api/admin/orders/{id}/mark-paid', $path, $params)) {
+    if ($method === 'PUT') (new PaymentController())->adminMarkPaid((int) $params['id']);
+}
+if (match_route('/api/payment/whish', $path, $params)) {
+    if ($method === 'GET') (new PaymentController())->whishPublic();
+}
+if (match_route('/api/admin/payment/whish', $path, $params)) {
+    if ($method === 'GET') (new PaymentController())->adminGetWhish();
+    if ($method === 'PUT') (new PaymentController())->adminUpdateWhish();
 }
 
 // ── Admin — Dashboard ─────────────────────────────────────────
@@ -237,6 +278,9 @@ if (match_route('/api/admin/dashboard', $path, $params)) {
 }
 if (match_route('/api/admin/abandoned-carts', $path, $params)) {
     if ($method === 'GET') (new AdminController())->abandonedCarts();
+}
+if (match_route('/api/admin/low-stock', $path, $params)) {
+    if ($method === 'GET') (new AdminController())->lowStock();
 }
 if (match_route('/api/admin/analytics', $path, $params)) {
     if ($method === 'GET') (new AdminController())->analytics();
@@ -292,6 +336,9 @@ if (match_route('/api/admin/categories/{id}', $path, $params)) {
 }
 
 // ── Admin — Orders ────────────────────────────────────────────
+if (match_route('/api/admin/orders/stats', $path, $params)) {
+    if ($method === 'GET') (new AdminController())->ordersStats();
+}
 if (match_route('/api/admin/orders', $path, $params)) {
     (new AdminController())->orders();
 }
@@ -310,6 +357,15 @@ if (match_route('/api/admin/products/export', $path, $params)) {
 }
 if (match_route('/api/admin/products/import', $path, $params)) {
     if ($method === 'POST') (new AdminController())->importProductsCsv();
+}
+if (match_route('/api/admin/products/stats', $path, $params)) {
+    if ($method === 'GET') (new AdminController())->productsStats();
+}
+if (match_route('/api/admin/products/bulk', $path, $params)) {
+    if ($method === 'POST') (new AdminController())->bulkProducts();
+}
+if (match_route('/api/admin/products/{id}/media', $path, $params)) {
+    if ($method === 'POST') (new ProductController())->uploadMedia((int) $params['id']);
 }
 if (match_route('/api/admin/products/{id}/images', $path, $params)) {
     if ($method === 'POST') (new AdminController())->uploadProductImage((int) $params['id']);
@@ -372,6 +428,22 @@ if (match_route('/api/chat/unread', $path, $params)) {
 }
 if (match_route('/api/chat', $path, $params)) {
     (new ChatController())->myChat();
+}
+
+// ── Reviews (admin) ───────────────────────────────────────────
+if (match_route('/api/admin/reviews', $path, $params)) {
+    if ($method === 'GET') (new ReviewController())->adminIndex();
+}
+
+// ── Activity ticker (public) ──────────────────────────────────
+if (match_route('/api/activity/recent', $path, $params)) {
+    if ($method === 'GET') (new ActivityController())->recent();
+}
+
+// ── Activity ticker (admin) ───────────────────────────────────
+if (match_route('/api/admin/activity/settings', $path, $params)) {
+    if ($method === 'GET') (new ActivityController())->adminGet();
+    if ($method === 'PUT') (new ActivityController())->adminUpdate();
 }
 
 // ── Bundles (public + admin) ──────────────────────────────────

@@ -44,7 +44,7 @@ class OrderController
         $shippingFee = $subtotal >= $FREE_SHIPPING_THRESHOLD ? 0.00 : $FLAT_SHIPPING_FEE;
         $tax         = round(max(0, $subtotal - $discount) * $TAX_RATE, 2);
         $total       = round($subtotal - $discount + $shippingFee + $tax, 2);
-        $method      = in_array($data['payment_method'] ?? '', ['stripe', 'cod'], true)
+        $method      = in_array($data['payment_method'] ?? '', ['stripe', 'cod', 'bank_transfer', 'whish'], true)
                        ? $data['payment_method'] : 'cod';
 
         $products = new ProductModel();

@@ -10,11 +10,19 @@ import Badge from '../ui/Badge'
 import StarRating from '../common/StarRating'
 import QuickView from './QuickView'
 import FlashCountdown from './FlashCountdown'
+import { toggleCompare, isInCompare, useCompare, COMPARE_MAX } from '../../lib/compare'
 
 const SHAPE_CLASS = {
   rounded: 'rounded-2xl',
   soft:    'rounded-lg',
   sharp:   'rounded-none',
+}
+
+// Pull the 11-char YouTube id out of an embed URL so we can build an
+// autoplay+mute+loop preview link for the hover effect.
+const ytIdFromEmbed = (url) => {
+  const m = String(url || '').match(/\/embed\/([A-Za-z0-9_-]{11})/)
+  return m ? m[1] : null
 }
 
 export default function ProductCard({ product, cardShape = 'rounded', cardSettings = {} }) {
@@ -32,6 +40,9 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
   const [adding, setAdding] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
   const [flashExpired, setFlashExpired] = useState(false)
+  const [previewActive, setPreviewActive] = useState(false)
+  const compareList = useCompare()
+  const inCompare   = isInCompare(product.id) && compareList.length >= 0 // touch list to subscribe
 
   // API returns base_price + optional sale_price; an active flash sale overrides both.
   const flash          = (product.flash_sale && !flashExpired) ? product.flash_sale : null
@@ -47,9 +58,13 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
   // Base stock_qty is the source of truth for simple + option products. Variant
   // products carry stock per-variant (picked on the detail page), so we don't
   // flag those out-of-stock from here.
-  const stockQty = Number(product.stock_qty || 0)
-  const isOut    = !hasVariants && stockQty === 0
-  const isLow    = !hasVariants && stockQty > 0 && stockQty <= 10
+  const stockQty   = Number(product.stock_qty || 0)
+  const isPreorder = product.release_date && new Date(String(product.release_date).slice(0, 10) + 'T00:00') > new Date()
+  const isOut      = !isPreorder && !hasVariants && stockQty === 0
+  const isLow      = !isPreorder && !hasVariants && stockQty > 0 && stockQty <= 10
+  const releaseLabel = isPreorder
+    ? new Date(String(product.release_date).slice(0, 10) + 'T00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null
 
   const rawSrc = product.primary_image || product.main_image
   const imgSrc = rawSrc
@@ -72,9 +87,23 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
     await dispatch(toggleWishlistThunk({ productId: product.id, wishlistItemId: isWished ? wItemId : null }))
   }
 
+  const handleCompare = (e) => {
+    e.preventDefault()
+    const res = toggleCompare(product)
+    if (res.ok && res.action === 'added')   toast.success('Added to compare')
+    if (res.ok && res.action === 'removed') toast.info('Removed from compare')
+    if (!res.ok && res.reason === 'full')   toast.error(`Compare list is full (max ${COMPARE_MAX})`)
+  }
+
   return (
     <>
-    <Link to={`/products/${product.slug}`} className="group product-card block">
+    <Link
+      to={`/products/${product.slug}`}
+      className="group product-card block active:scale-[0.96]"
+      style={{ transition: 'transform 0.22s var(--ease-out-soft)' }}
+      onMouseEnter={() => { if (product.preview_video) setPreviewActive(true) }}
+      onMouseLeave={() => setPreviewActive(false)}
+    >
       <div className={`bg-surface ${shapeClass} overflow-hidden ring-1 ring-border/60 shadow-soft hover:shadow-float hover:ring-ink/10 transition-all duration-500 ease-(--ease-out-soft) hover:-translate-y-1.5`}>
         {/* Image */}
         <div className="relative overflow-hidden bg-surface-alt" style={{ aspectRatio: imageRatio }}>
@@ -84,14 +113,58 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
             className="w-full h-full object-cover product-card-img"
             loading="lazy"
           />
+
+          {/* Hover-to-play video preview (only mounted on hover so we don't load N iframes at once). */}
+          {previewActive && product.preview_video && product.preview_video_type === 'youtube' && (() => {
+            const vid = ytIdFromEmbed(product.preview_video)
+            const src = `${product.preview_video}?autoplay=1&mute=1&controls=0&loop=1${vid ? `&playlist=${vid}` : ''}&modestbranding=1&rel=0&playsinline=1&disablekb=1&iv_load_policy=3`
+            return (
+              <iframe
+                src={src}
+                title={`${product.name} preview`}
+                allow="autoplay; encrypted-media; picture-in-picture"
+                className="absolute inset-0 w-full h-full border-0 pointer-events-none"
+                style={{ background: '#000' }}
+              />
+            )
+          })()}
+          {previewActive && product.preview_video && product.preview_video_type === 'video' && (
+            <video
+              src={product.preview_video.startsWith('http') ? product.preview_video : `/MyShop/backend/${product.preview_video}`}
+              autoPlay muted loop playsInline preload="metadata"
+              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              style={{ background: '#000' }}
+            />
+          )}
+          {product.preview_video && (
+            <span
+              className="absolute bottom-2.5 left-2.5 z-20 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
+              style={{ background: 'rgba(15,15,15,0.7)', backdropFilter: 'blur(4px)' }}
+              aria-label="Has video preview"
+            >
+              <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+              Video
+            </span>
+          )}
+
           {/* Soft gradient sheen that lifts on hover */}
           <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-ink/15 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           {/* Badges */}
           {(showBadges || isLow) && (
             <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5">
-              {showBadges && flash
+              {isPreorder && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full text-white shadow-sm" style={{ background: 'linear-gradient(135deg,#7C3AED 0%,#4338CA 100%)' }}>
+                  🗓 Coming {releaseLabel}
+                </span>
+              )}
+              {!isPreorder && showBadges && flash
                 ? <Badge variant="sale">⚡ Flash -{discount}%</Badge>
-                : showBadges && discount && <Badge variant="sale">-{discount}%</Badge>}
+                : !isPreorder && showBadges && discount && <Badge variant="sale">-{discount}%</Badge>}
+              {!isPreorder && showBadges && product.is_trending && !flash && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full text-white shadow-sm" style={{ background: 'linear-gradient(135deg,#F97316 0%,#C0392B 100%)' }}>
+                  🔥 Trending
+                </span>
+              )}
               {showBadges && product.is_new && <Badge variant="new">New</Badge>}
               {isLow && <Badge variant="warning" size="xs">Only {stockQty} left</Badge>}
             </div>
@@ -134,8 +207,23 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
+          {/* Compare toggle — hover-revealed below quick view */}
+          <button
+            onClick={handleCompare}
+            aria-label={inCompare ? 'Remove from compare' : 'Add to compare'}
+            aria-pressed={inCompare}
+            className={`absolute top-25 right-3 z-20 w-9 h-9 rounded-full flex items-center justify-center shadow-md
+              transition-all duration-300 ease-(--ease-out-back) active:scale-90
+              ${inCompare
+                ? 'bg-ink text-white opacity-100 scale-100'
+                : 'bg-white/70 backdrop-blur-md text-ink-tertiary opacity-0 group-hover:opacity-100 hover:text-ink hover:bg-white hover:scale-110'}`}
+          >
+            <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h13M3 12h9M3 18h6M17 6l4 3-4 3M21 18l-4-3 4-3" />
+            </svg>
+          </button>
           {/* Quick add — only for in-stock products without variants */}
-          {showQuickAdd && !hasVariants && !isOut && (
+          {showQuickAdd && !hasVariants && !isOut && !isPreorder && (
             <div className="absolute bottom-0 inset-x-0 p-3 translate-y-full opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-(--ease-out-soft)">
               <button
                 onClick={handleAddToCart}

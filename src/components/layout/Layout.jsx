@@ -5,6 +5,10 @@ import BottomNav from './BottomNav'
 import ToastContainer from '../ui/Toast'
 import WhatsAppButton from '../common/WhatsAppButton'
 import ChatWidget from '../chat/ChatWidget'
+import ScrollToTop from '../common/ScrollToTop'
+import LiveActivityTicker from '../common/LiveActivityTicker'
+import NewsletterPopup from '../common/NewsletterPopup'
+import CompareBar from '../compare/CompareBar'
 
 // Shared header state so sticky sub-bars (e.g. the Shop category bar) can
 // follow the header as it hides/shows on scroll.
@@ -55,6 +59,10 @@ export default function Layout({ children }) {
         <BottomNav />
         <WhatsAppButton />
         <ChatWidget />
+        <ScrollToTop />
+        <LiveActivityTicker />
+        <NewsletterPopup />
+        <CompareBar />
         <ToastContainer />
       </div>
     </HeaderUIContext.Provider>

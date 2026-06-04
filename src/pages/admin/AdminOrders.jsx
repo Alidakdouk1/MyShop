@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getAdminOrders, updateOrderStatus } from '../../api/adminApi'
 import { getOrder } from '../../api/orderApi'
+import { markOrderPaid } from '../../api/paymentApi'
 import { downloadInvoice } from '../../lib/invoice'
 import { useToast } from '../../hooks/useToast'
 import Spinner from '../../components/ui/Spinner'
@@ -23,6 +24,7 @@ export default function AdminOrders() {
   const [totalPages, setTotalPages] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [invoicing, setInvoicing] = useState(null)
+  const [markingPaid, setMarkingPaid] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -46,6 +48,18 @@ export default function AdminOrders() {
 
   // The list rows only hold order summaries, so fetch the full order (with items
   // + address) before building the invoice. Admins are allowed by /api/orders/{id}.
+  const handleMarkPaid = async (orderId) => {
+    if (!confirm('Mark this order as paid? Do this only after you confirm the transfer landed in your account.')) return
+    setMarkingPaid(orderId)
+    try {
+      await markOrderPaid(orderId)
+      setOrders(os => os.map(o => o.id === orderId ? { ...o, payment_status: 'paid' } : o))
+      toast.success('Marked as paid')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not mark paid')
+    } finally { setMarkingPaid(null) }
+  }
+
   const handleInvoice = async (orderId) => {
     setInvoicing(orderId)
     try {
@@ -100,7 +114,25 @@ export default function AdminOrders() {
                       <p className="text-xs text-ink-tertiary">{o.customer_email}</p>
                     </td>
                     <td className="px-4 py-3 font-semibold">${Number(o.total).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-ink-secondary capitalize">{o.payment_method?.replace('_', ' ')}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-ink-secondary capitalize">{o.payment_method?.replace('_', ' ')}</div>
+                      {o.payment_method === 'bank_transfer' && o.payment_status !== 'paid' && (
+                        <button
+                          onClick={() => handleMarkPaid(o.id)}
+                          disabled={markingPaid === o.id}
+                          title="Mark as paid once the transfer landed"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2 py-1 rounded-md text-white disabled:opacity-60"
+                          style={{ background: '#16A34A' }}
+                        >
+                          {markingPaid === o.id ? '…' : '✓ Mark paid'}
+                        </button>
+                      )}
+                      {o.payment_status === 'paid' && (
+                        <span className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: '#F0FDF4', color: '#16A34A' }}>
+                          Paid
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <Select value={o.status} onChange={e => handleStatus(o.id, e.target.value)}
                         disabled={updating === o.id} className="!h-8 !text-xs !py-0">

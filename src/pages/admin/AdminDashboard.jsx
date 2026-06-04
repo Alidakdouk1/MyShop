@@ -243,22 +243,44 @@ export default function AdminDashboard() {
       {/* Low-stock alerts */}
       {data?.low_stock?.length > 0 && (
         <div className="rounded-2xl p-5 mb-4" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="font-bold text-base" style={{ color: '#0F0F0F' }}>Low Stock Alerts</h2>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#FEF2F2', color: '#C0392B' }}>{data.low_stock.length}</span>
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <h2 className="font-bold text-base" style={{ color: '#0F0F0F' }}>Low Stock Alerts</h2>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#FEF2F2', color: '#C0392B' }}>
+                {data.low_stock_count ?? data.low_stock.length}
+              </span>
+            </div>
+            <Link
+              to="/admin/low-stock"
+              className="text-xs font-bold uppercase tracking-wider text-ink-tertiary hover:text-ink transition-colors"
+            >
+              View all →
+            </Link>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {data.low_stock.map(p => (
-              <Link
-                key={p.id}
-                to={`/admin/products/${p.id}/edit`}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-opacity hover:opacity-80"
-                style={{ background: '#FEF9EC' }}
-              >
-                <span className="font-medium truncate max-w-[160px]" style={{ color: '#92700A' }}>{p.name}</span>
-                <span className="font-black" style={{ color: p.stock_qty === 0 ? '#C0392B' : '#D97706' }}>{p.stock_qty}</span>
-              </Link>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {data.low_stock.map(p => {
+              const img = p.primary_image
+                ? (p.primary_image.startsWith('http') ? p.primary_image : `/MyShop/backend/${p.primary_image}`)
+                : 'https://placehold.co/80x80/F2F0EB/9C9894?text=%E2%80%A2'
+              const out = Number(p.stock_qty) === 0
+              return (
+                <Link
+                  key={p.id}
+                  to={`/admin/products/${p.id}/edit`}
+                  className="flex items-center gap-3 p-2 rounded-xl transition-colors hover:bg-surface-alt"
+                  style={{ background: out ? '#FEF2F2' : '#FEF9EC' }}
+                >
+                  <img src={img} alt={p.name} className="w-10 h-10 rounded-lg object-cover bg-white shrink-0" loading="lazy" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: out ? '#991B1B' : '#92700A' }}>{p.name}</p>
+                    <p className="text-[11px]" style={{ color: out ? '#C0392B' : '#A16207' }}>
+                      {out ? 'Out of stock' : `${p.stock_qty} left · alert at ${p.low_stock_threshold}`}
+                    </p>
+                  </div>
+                  <span className="text-lg font-black shrink-0" style={{ color: out ? '#C0392B' : '#D97706', fontVariantNumeric: 'tabular-nums' }}>{p.stock_qty}</span>
+                </Link>
+              )
+            })}
           </div>
         </div>
       )}

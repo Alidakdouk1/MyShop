@@ -21,6 +21,7 @@ const Shop          = lazy(() => import('./pages/Shop'))
 const ProductDetail = lazy(() => import('./pages/ProductDetail'))
 const Cart          = lazy(() => import('./pages/Cart'))
 const Checkout      = lazy(() => import('./pages/Checkout'))
+const Compare       = lazy(() => import('./pages/Compare'))
 const NotFound      = lazy(() => import('./pages/NotFound'))
 
 const Login    = lazy(() => import('./pages/auth/Login'))
@@ -36,6 +37,7 @@ const AdminDashboard      = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminUsers          = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminOrders         = lazy(() => import('./pages/admin/AdminOrders'))
 const AdminProducts       = lazy(() => import('./pages/admin/AdminProducts'))
+const AdminLowStock       = lazy(() => import('./pages/admin/AdminLowStock'))
 const AdminAdmins         = lazy(() => import('./pages/admin/AdminAdmins'))
 const AdminAddEditProduct = lazy(() => import('./pages/admin/AddEditProduct'))
 const AdminHomepage       = lazy(() => import('./pages/admin/AdminHomepage'))
@@ -48,6 +50,11 @@ const AdminFlashSales     = lazy(() => import('./pages/admin/AdminFlashSales'))
 const AdminAnalytics      = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminCurrencies     = lazy(() => import('./pages/admin/AdminCurrencies'))
 const AdminBundles        = lazy(() => import('./pages/admin/AdminBundles'))
+const AdminReviews        = lazy(() => import('./pages/admin/AdminReviews'))
+const AdminActivity       = lazy(() => import('./pages/admin/AdminActivity'))
+const AdminNewsletterPopup = lazy(() => import('./pages/admin/AdminNewsletterPopup'))
+const AdminBankTransfer    = lazy(() => import('./pages/admin/AdminBankTransfer'))
+const AdminWhish           = lazy(() => import('./pages/admin/AdminWhish'))
 
 function PageFallback() {
   return (
@@ -85,6 +92,7 @@ export default function App() {
         <Route path="/shop"           element={<CustomerRoute><Layout><Shop /></Layout></CustomerRoute>} />
         <Route path="/products/:slug" element={<CustomerRoute><Layout><ProductDetail /></Layout></CustomerRoute>} />
         <Route path="/cart"           element={<CustomerRoute><Layout><Cart /></Layout></CustomerRoute>} />
+        <Route path="/compare"        element={<CustomerRoute><Layout><Compare /></Layout></CustomerRoute>} />
         <Route path="/login"          element={<Login />} />
         <Route path="/register"       element={<CustomerRoute><Register /></CustomerRoute>} />
 
@@ -101,6 +109,7 @@ export default function App() {
         <Route path="/admin/admins"            element={<ProtectedRoute role="admin"><AdminLayout><AdminAdmins /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/orders"            element={<ProtectedRoute role="admin"><AdminLayout><AdminOrders /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/products"          element={<ProtectedRoute role="admin"><AdminLayout><AdminProducts /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/low-stock"         element={<ProtectedRoute role="admin"><AdminLayout><AdminLowStock /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/categories"        element={<ProtectedRoute role="admin"><AdminLayout><AdminCategories /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/filters"           element={<ProtectedRoute role="admin"><AdminLayout><AdminFilters /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/products/new"      element={<ProtectedRoute role="admin"><AdminLayout><AdminAddEditProduct /></AdminLayout></ProtectedRoute>} />
@@ -114,6 +123,11 @@ export default function App() {
         <Route path="/admin/analytics"        element={<ProtectedRoute role="admin"><AdminLayout><AdminAnalytics /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/currencies"       element={<ProtectedRoute role="admin"><AdminLayout><AdminCurrencies /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/bundles"          element={<ProtectedRoute role="admin"><AdminLayout><AdminBundles /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/reviews"          element={<ProtectedRoute role="admin"><AdminLayout><AdminReviews /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/activity"         element={<ProtectedRoute role="admin"><AdminLayout><AdminActivity /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/newsletter-popup" element={<ProtectedRoute role="admin"><AdminLayout><AdminNewsletterPopup /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/bank-transfer"    element={<ProtectedRoute role="admin"><AdminLayout><AdminBankTransfer /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/whish"            element={<ProtectedRoute role="admin"><AdminLayout><AdminWhish /></AdminLayout></ProtectedRoute>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>

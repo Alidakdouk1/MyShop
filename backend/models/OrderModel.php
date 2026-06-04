@@ -85,6 +85,21 @@ class OrderModel extends BaseModel
             [$orderId]
         )->fetchAll();
         $order['status_history'] = $this->statusHistory($orderId);
+
+        // Hydrate the shipping address snapshot so the order page renders without
+        // a second round-trip. If the user later deletes the address we still
+        // have an order, but the join will simply return null.
+        if (!empty($order['address_id'])) {
+            $addr = $this->query(
+                "SELECT id, label, recipient_name, phone, street, city, state, country, zip
+                 FROM addresses WHERE id = ?",
+                [(int) $order['address_id']]
+            )->fetch();
+            $order['shipping_address'] = $addr ?: null;
+        } else {
+            $order['shipping_address'] = null;
+        }
+
         return $order;
     }
 
@@ -264,6 +279,25 @@ class OrderModel extends BaseModel
         )->rowCount() > 0;
     }
 
+    /** Compact stat strip for the AdminOrders page. */
+    public function adminStats(): array
+    {
+        $row = $this->query(
+            "SELECT
+                SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) AS today_orders,
+                COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() AND payment_status = 'paid' THEN total ELSE 0 END), 0) AS today_revenue,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+                COALESCE(SUM(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND payment_status = 'paid' THEN total ELSE 0 END), 0) AS week_revenue
+             FROM orders"
+        )->fetch();
+        return [
+            'today_orders'  => (int) $row['today_orders'],
+            'today_revenue' => (float) $row['today_revenue'],
+            'pending_count' => (int) $row['pending_count'],
+            'week_revenue'  => (float) $row['week_revenue'],
+        ];
+    }
+
     public function revenueStats(): array
     {
         return $this->query(
@@ -366,6 +400,7 @@ class OrderModel extends BaseModel
              WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
              GROUP BY status",
             [$days]
+            
         )->fetchAll();
     }
 }

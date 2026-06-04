@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   getAdminProduct, adminCreateProduct, adminUpdateProduct,
   adminUploadImage, adminDeleteImage,
+  adminUploadVideo, adminAddYoutube,
 } from '../../api/adminApi'
 import { getCategoriesFlat } from '../../api/productApi'
 import { saveProductFilters, buildFiltersPayload } from '../../api/filterApi'
@@ -26,12 +27,14 @@ export default function AdminAddEditProduct() {
   const [preview,          setPreview]          = useState(null)
   const [existingImages,   setExistingImages]   = useState([])
   const [deletingImg,      setDeletingImg]      = useState(null)
+  const [addingVideo,      setAddingVideo]      = useState(false)
 
   const [filterSelections, setFilterSelections] = useState({})
 
   const [form, setForm] = useState({
     name: '', description: '', base_price: '', sale_price: '',
     category_id: '', sku: '', status: 'active', is_featured: 0,
+    release_date: '', low_stock_threshold: 5,
   })
   const [errors, setErrors] = useState({})
 
@@ -56,14 +59,16 @@ export default function AdminAddEditProduct() {
         .then(r => {
           const p = r.data.data
           setForm({
-            name:        p.name        || '',
-            description: p.description || '',
-            base_price:  p.base_price  || '',
-            sale_price:  p.sale_price  || '',
-            category_id: p.category_id || '',
-            sku:         p.sku         || '',
-            status:      p.status      || 'active',
-            is_featured: p.is_featured || 0,
+            name:         p.name         || '',
+            description:  p.description  || '',
+            base_price:   p.base_price   || '',
+            sale_price:   p.sale_price   || '',
+            category_id:  p.category_id  || '',
+            sku:          p.sku          || '',
+            status:       p.status       || 'active',
+            is_featured:  p.is_featured  || 0,
+            release_date: p.release_date || '',
+            low_stock_threshold: p.low_stock_threshold ?? 5,
           })
           setExistingImages(p.images || [])
           const primary = (p.images || []).find(i => i.is_primary) || (p.images || [])[0]
@@ -99,8 +104,48 @@ export default function AdminAddEditProduct() {
     setPreview(URL.createObjectURL(file))
   }
 
+  const productIdForMedia = id || createdProductId
+
+  const handleAddYouTube = async () => {
+    const pid = productIdForMedia
+    if (!pid) { toast.info('Save the product first, then add videos'); return }
+    const url = window.prompt('Paste a YouTube URL (youtube.com/watch?v=… or youtu.be/…):')
+    if (!url) return
+    setAddingVideo(true)
+    try {
+      const { data } = await adminAddYoutube(pid, url.trim())
+      const m = data?.data || {}
+      setExistingImages(imgs => [...imgs, {
+        id: m.id, image_url: m.image_url, video_url: m.video_url, media_type: 'youtube', is_primary: 0,
+      }])
+      toast.success('YouTube video added')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not add video')
+    } finally { setAddingVideo(false) }
+  }
+
+  const handleVideoFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const pid = productIdForMedia
+    if (!pid) { toast.info('Save the product first, then add videos'); return }
+    setAddingVideo(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const { data } = await adminUploadVideo(pid, fd)
+      const m = data?.data || {}
+      setExistingImages(imgs => [...imgs, {
+        id: m.id, image_url: '', video_url: m.video_url, media_type: 'video', is_primary: 0,
+      }])
+      toast.success('Video uploaded')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not upload video')
+    } finally { setAddingVideo(false) }
+  }
+
   const handleDeleteImage = async (imgId) => {
-    if (!confirm('Delete this image?')) return
+    if (!confirm('Delete this item?')) return
     setDeletingImg(imgId)
     try {
       await adminDeleteImage(id, imgId)
@@ -116,7 +161,12 @@ export default function AdminAddEditProduct() {
     setSaving(true)
     try {
       let productId = id || createdProductId
-      const payload = { ...form, stock_qty: totalStock }
+      const payload = {
+        ...form,
+        stock_qty:           totalStock,
+        release_date:        form.release_date || null,
+        low_stock_threshold: Math.max(0, parseInt(form.low_stock_threshold, 10) || 0),
+      }
       if (isEdit) {
         await adminUpdateProduct(id, payload)
       } else if (!productId) {
@@ -169,45 +219,77 @@ export default function AdminAddEditProduct() {
 
           {existingImages.length > 0 && (
             <div className="flex flex-wrap gap-3 mb-4">
-              {existingImages.map(img => (
-                <div key={img.id} className="relative group">
-                  <img
-                    src={img.image_url.startsWith('http') ? img.image_url : `/MyShop/backend/${img.image_url}`}
-                    alt=""
-                    className="w-20 h-20 object-cover rounded-xl bg-surface-alt"
-                  />
-                  {img.is_primary == 1 && (
-                    <span className="absolute top-1 left-1 bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                      Main
+              {existingImages.map(img => {
+                const isVideo = img.media_type === 'youtube' || img.media_type === 'video'
+                const hasPoster = img.image_url && String(img.image_url).length > 0
+                return (
+                  <div key={img.id} className="relative group">
+                    <div className="w-20 h-20 rounded-xl bg-surface-alt overflow-hidden flex items-center justify-center">
+                      {hasPoster ? (
+                        <img
+                          src={img.image_url.startsWith('http') ? img.image_url : `/MyShop/backend/${img.image_url}`}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <svg className="w-7 h-7 text-ink-tertiary" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11Zm6.6 3.13a.75.75 0 0 0-1.1.66v3.42a.75.75 0 0 0 1.1.66l3.2-1.71a.75.75 0 0 0 0-1.32L10.6 9.63Z" /></svg>
+                      )}
+                    </div>
+                    {isVideo && (
+                      <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <span className="w-7 h-7 rounded-full bg-black/55 text-white flex items-center justify-center">
+                          <svg className="w-3.5 h-3.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        </span>
+                      </span>
+                    )}
+                    <span className="absolute bottom-1 right-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: 'rgba(15,15,15,0.8)' }}>
+                      {img.media_type === 'youtube' ? 'YT' : img.media_type === 'video' ? 'MP4' : ''}
                     </span>
-                  )}
-                  {isEdit && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteImage(img.id)}
-                      disabled={deletingImg === img.id}
-                      className="absolute -top-2 -right-2 w-5 h-5 bg-accent text-white rounded-full text-xs hidden group-hover:flex items-center justify-center"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
+                    {img.is_primary == 1 && (
+                      <span className="absolute top-1 left-1 bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                        Main
+                      </span>
+                    )}
+                    {isEdit && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteImage(img.id)}
+                        disabled={deletingImg === img.id}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-accent text-white rounded-full text-xs hidden group-hover:flex items-center justify-center"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             {preview && existingImages.length === 0 ? (
               <img src={preview} alt="Preview" className="w-20 h-20 object-cover rounded-xl bg-surface-alt" />
             ) : !existingImages.length ? (
               <div className="w-20 h-20 bg-surface-alt rounded-xl flex items-center justify-center text-ink-tertiary text-3xl">📸</div>
             ) : null}
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <label className="cursor-pointer bg-surface border border-border rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-surface-alt transition-colors">
-                {existingImages.length > 0 ? 'Add Another Image' : preview ? 'Change Image' : 'Upload Image'}
+                {existingImages.length > 0 ? 'Add Image' : preview ? 'Change Image' : 'Upload Image'}
                 <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
               </label>
-              <p className="text-xs text-ink-tertiary mt-1.5">JPG, PNG, WebP · Max 5MB</p>
+              <button
+                type="button"
+                onClick={handleAddYouTube}
+                disabled={addingVideo}
+                className="bg-surface border border-border rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60"
+              >
+                Add YouTube URL
+              </button>
+              <label className={`cursor-pointer bg-surface border border-border rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-surface-alt transition-colors ${addingVideo ? 'opacity-60 pointer-events-none' : ''}`}>
+                Upload Video
+                <input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={handleVideoFile} className="hidden" />
+              </label>
+              <p className="text-xs text-ink-tertiary w-full">Images: JPG/PNG/WebP · 5MB · Videos: MP4/WebM/MOV · 50MB</p>
             </div>
           </div>
         </section>
@@ -247,10 +329,10 @@ export default function AdminAddEditProduct() {
           />
 
           <div
-            className="rounded-xl px-4 py-3 flex items-center justify-between"
+            className="rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap"
             style={{ background: '#F0EEE9', border: '1px solid rgba(0,0,0,0.06)' }}
           >
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#5C5854' }}>
                 Total stock
               </p>
@@ -258,12 +340,34 @@ export default function AdminAddEditProduct() {
                 Sum of every quantity you set per filter option below
               </p>
             </div>
-            <p
-              className="text-2xl font-black"
-              style={{ color: '#0F0F0F', fontVariantNumeric: 'tabular-nums' }}
-            >
-              {totalStock}
-            </p>
+            <div className="flex items-center gap-5">
+              <p
+                className="text-2xl font-black"
+                style={{
+                  color: totalStock <= Number(form.low_stock_threshold ?? 0) ? '#C0392B' : '#0F0F0F',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {totalStock}
+              </p>
+              <div className="border-l h-9 border-border" />
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#5C5854' }}>
+                  Low-stock alert at
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.low_stock_threshold}
+                    onChange={e => set('low_stock_threshold', e.target.value)}
+                    className="w-20 text-sm rounded-lg px-2 py-1.5 outline-none border border-border bg-white text-ink focus:border-ink transition-colors text-right"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  />
+                  <span className="text-[11px]" style={{ color: '#9C9894' }}>units</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <Select
@@ -288,6 +392,27 @@ export default function AdminAddEditProduct() {
               <option value="0">Not featured</option>
               <option value="1">Featured on homepage</option>
             </Select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-ink-secondary">Pre-order release date <span className="font-normal text-ink-tertiary">(optional)</span></label>
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                type="date"
+                value={form.release_date ? String(form.release_date).slice(0, 10) : ''}
+                onChange={e => set('release_date', e.target.value)}
+                className="text-sm rounded-xl px-3 py-2.5 outline-none border border-border bg-white text-ink focus:border-ink transition-colors"
+              />
+              {form.release_date && (
+                <button type="button" onClick={() => set('release_date', '')}
+                  className="text-xs font-bold text-ink-tertiary hover:text-accent transition-colors px-2">
+                  Clear
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-ink-tertiary mt-1">
+              Set a future date to mark this product as a pre-order. The storefront will show "Coming on …" + "Notify Me" instead of "Add to Cart". Leave blank for normal availability.
+            </p>
           </div>
         </section>
 

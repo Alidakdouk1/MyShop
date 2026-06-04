@@ -10,6 +10,19 @@ class ProductController
         $this->products = new ProductModel();
     }
 
+    /** Mark products as `is_trending` when their views_count is high relative
+     *  to the catalogue's current top — gives the storefront a "hot right now" cue. */
+    private function attachTrending(array $products): array
+    {
+        if (!$products) return $products;
+        $max       = $this->products->topViewsCount();
+        $threshold = max(50, (int) ($max * 0.5));
+        foreach ($products as &$p) {
+            $p['is_trending'] = ((int) ($p['views_count'] ?? 0)) >= $threshold;
+        }
+        return $products;
+    }
+
     /** Attach `flash_sale` (title, discount, ends_at, flash_price) to any product
      *  rows that are in a currently-active flash sale. */
     private function attachFlash(array $products): array
@@ -48,6 +61,7 @@ class ProductController
         ];
         $items = $this->products->search($filters, $perPage, $offset);
         $items = $this->attachFlash($items);
+        $items = $this->attachTrending($items);
         $total = $this->products->countSearch($filters);
         paginated($items, $total, $page, $perPage);
     }
@@ -151,9 +165,9 @@ class ProductController
                 $takenIds[] = (int) $cand['id'];
             }
         }
-        $product['related']         = $this->attachFlash($product['related']);
-        $product['bought_together'] = $this->attachFlash($fbt);
-        $product                    = $this->attachFlash([$product])[0];
+        $product['related']         = $this->attachTrending($this->attachFlash($product['related']));
+        $product['bought_together'] = $this->attachTrending($this->attachFlash($fbt));
+        $product                    = $this->attachTrending($this->attachFlash([$product]))[0];
         $product['bundles']         = (new BundleModel())->forProduct((int) $product['id']);
 
         success($product);
@@ -206,7 +220,7 @@ class ProductController
         }
 
         $data   = getBody();
-        $fields = ['name', 'description', 'base_price', 'sale_price', 'stock_qty',
+        $fields = ['name', 'description', 'base_price', 'sale_price', 'stock_qty', 'low_stock_threshold', 'release_date',
                    'category_id', 'status', 'is_featured', 'weight'];
         $update = [];
         foreach ($fields as $f) {
@@ -229,6 +243,53 @@ class ProductController
         }
         $this->products->delete($id);
         success(null, 'Product deleted.');
+    }
+
+    /**
+     * Attach a YouTube URL or upload an MP4/WebM/MOV video file to the product
+     * gallery. Multipart form-data with `file` → video upload; JSON or form with
+     * `youtube_url` → YouTube embed.
+     */
+    public function uploadMedia(int $id): never
+    {
+        method('POST');
+        $auth    = AuthMiddleware::require();
+        $product = $this->products->findById($id);
+        if (!$product) error('Product not found.', 404);
+        if ($auth['role'] !== 'admin' && (int) $product['vendor_id'] !== (int) $auth['sub']) {
+            error('Forbidden.', 403);
+        }
+
+        // File upload path
+        if (!empty($_FILES['file']['tmp_name']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+            try {
+                $url     = UploadHelper::saveProductVideo($_FILES['file'], $id);
+                $mediaId = $this->products->addVideo($id, 'video', $url, null, count($this->products->images($id)));
+                success(['id' => $mediaId, 'video_url' => $url, 'media_type' => 'video'], 'Video uploaded.', 201);
+            } catch (InvalidArgumentException $e) {
+                error($e->getMessage(), 422);
+            }
+        }
+
+        // YouTube URL path
+        $data       = getBody();
+        $youtubeUrl = trim($data['youtube_url'] ?? $_POST['youtube_url'] ?? '');
+        if (!$youtubeUrl) error('Send either a video file or a youtube_url.', 422);
+
+        // Extract the 11-char YouTube video id from any standard URL form.
+        if (!preg_match('~(?:youtube\.com/(?:watch\?v=|embed/|v/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})~', $youtubeUrl, $m)) {
+            error('Could not read a YouTube video id from that URL.', 422);
+        }
+        $vid     = $m[1];
+        $embed   = "https://www.youtube.com/embed/{$vid}";
+        $poster  = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
+        $mediaId = $this->products->addVideo($id, 'youtube', $embed, $poster, count($this->products->images($id)));
+        success([
+            'id'         => $mediaId,
+            'video_url'  => $embed,
+            'image_url'  => $poster,
+            'media_type' => 'youtube',
+        ], 'YouTube video added.', 201);
     }
 
     public function uploadImage(int $id): never

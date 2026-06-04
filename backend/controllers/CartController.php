@@ -46,6 +46,12 @@ class CartController
         $product  = $products->findById($productId);
         if (!$product || $product['status'] !== 'active') error('Product not available.', 404);
 
+        // Pre-order: refuse to add until the release date has arrived.
+        if (!empty($product['release_date']) && $product['release_date'] > date('Y-m-d')) {
+            $when = date('M j, Y', strtotime($product['release_date']));
+            error("This product is a pre-order — available on {$when}. Use Notify Me to be alerted on launch day.", 422);
+        }
+
         // Honour an active flash sale: the discounted price is what we snapshot
         // into the cart, so checkout charges the deal — not the regular price.
         $flashSale  = (new FlashSaleModel())->activeForProduct($productId);
@@ -219,6 +225,68 @@ class CartController
             error('Item not found.', 404);
         }
         success(null, 'Item removed.');
+    }
+
+    /**
+     * "Recommended for you" rail: co-purchased products for the items currently
+     * in the cart. Falls back to popular products in the same categories when
+     * there's no co-purchase history yet (cold start).
+     */
+    public function recommendations(): never
+    {
+        method('GET');
+        $cart  = $this->getCart();
+        $items = $this->carts->items((int) $cart['id']);
+        if (!$items) success([]);
+
+        $cartIds  = array_map(fn($i) => (int) $i['product_id'], $items);
+        $products = new ProductModel();
+        $recs     = $products->frequentlyBoughtWithAny($cartIds, 6);
+
+        // Cold-start fallback — fill from popular items in the cart's
+        // categories, never including what's already in the cart.
+        if (count($recs) < 4) {
+            $taken = $cartIds;
+            foreach ($recs as $r) $taken[] = (int) $r['id'];
+            $catIds = $products->categoryIdsForProducts($cartIds);
+            foreach ($catIds as $cid) {
+                if (!$cid || count($recs) >= 4) continue;
+                $pool = $products->search(['category_id' => $cid, 'sort' => 'popular'], 10, 0);
+                foreach ($pool as $cand) {
+                    if (count($recs) >= 4) break;
+                    if (in_array((int) $cand['id'], $taken, true)) continue;
+                    $cand['together_count'] = 0;
+                    $recs[]  = $cand;
+                    $taken[] = (int) $cand['id'];
+                }
+            }
+        }
+        success($recs);
+    }
+
+    /**
+     * Single-click add-ons that fit the remaining gap to free shipping.
+     * Returns small cheap items the shopper can pop in to unlock the perk.
+     */
+    public function upsell(): never
+    {
+        method('GET');
+        $FREE_SHIPPING_THRESHOLD = 50.00;
+        $cart  = $this->getCart();
+        $items = $this->carts->items((int) $cart['id']);
+        $subtotal = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
+        $remaining = max(0.0, $FREE_SHIPPING_THRESHOLD - $subtotal);
+
+        // Already unlocked — nothing to suggest.
+        if ($remaining <= 0) success(['remaining' => 0.0, 'items' => []]);
+
+        $excludeIds = array_map(fn($i) => (int) $i['product_id'], $items);
+        // Suggest items up to 1.5× the gap so the shopper has a couple of options.
+        $rows = (new ProductModel())->upsellUnderPrice($remaining * 1.5, $excludeIds, 4);
+        success([
+            'remaining' => round($remaining, 2),
+            'items'     => $rows,
+        ]);
     }
 
     public function clear(): never

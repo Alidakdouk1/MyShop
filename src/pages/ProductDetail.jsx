@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { getProduct, getProductReviews, createReview, notifyBackInStock } from '../api/productApi'
+import { getProduct, getProductReviews, createReview, notifyBackInStock, uploadReviewPhoto, getReviewability } from '../api/productApi'
 import { getProductQuestions, askQuestion } from '../api/questionApi'
 import { getProductFilters } from '../api/filterApi'
 import { addToCartThunk } from '../store/slices/cartSlice'
@@ -15,8 +15,10 @@ import ProductCard from '../components/product/ProductCard'
 import FrequentlyBoughtTogether from '../components/product/FrequentlyBoughtTogether'
 import BundleCard from '../components/product/BundleCard'
 import FlashCountdown from '../components/product/FlashCountdown'
+import { ProductDetailSkeleton } from '../components/ui/Skeleton'
 import Seo from '../components/common/Seo'
 import { getRecentlyViewed, addRecentlyViewed } from '../lib/recentlyViewed'
+import { toggleCompare, isInCompare, useCompare, COMPARE_MAX } from '../lib/compare'
 
 function FilterOptionPill({ label, active, soldOut, tooltip, onClick }) {
   const [hover, setHover] = useState(false)
@@ -90,6 +92,9 @@ export default function ProductDetail() {
   const user        = useSelector(selectUser)
   const [product, setProduct]     = useState(null)
   const [reviews, setReviews]     = useState([])
+  const [reviewPhotos, setReviewPhotos] = useState([])
+  const [photoFiles, setPhotoFiles] = useState([])
+  const [reviewability, setReviewability] = useState({ status: 'login_required' })
   const [loading, setLoading]     = useState(true)
   const [qty, setQty]             = useState(1)
   const [activeImg, setActiveImg] = useState(0)
@@ -110,12 +115,30 @@ export default function ProductDetail() {
   const [zoom, setZoom]           = useState({ on: false, x: 50, y: 50 })
   const [imgLoaded, setImgLoaded] = useState(false)
   const [flashExpired, setFlashExpired] = useState(false)
+  const [liveViews, setLiveViews] = useState(0)
+  const [stickyVisible, setStickyVisible] = useState(false)
   const [productFilters, setProductFilters] = useState([])
   const [pickedFilters, setPickedFilters]   = useState({}) // { [filter_id]: optionId }
   const tabsRef = useRef(null)
+  const scrollRef = useRef(null)
+
+  const scrollTo = (i) => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTo({ left: el.clientWidth * i, behavior: 'smooth' })
+    setActiveImg(i)
+  }
+  const onCarouselScroll = (e) => {
+    const w = e.currentTarget.clientWidth
+    if (!w) return
+    const i = Math.round(e.currentTarget.scrollLeft / w)
+    if (i !== activeImg) setActiveImg(i)
+  }
 
   const isWished = useSelector(selectIsWishlisted(product?.id))
   const wItemId  = useSelector(selectWishlistItemId(product?.id))
+  const compareList = useCompare()
+  const inCompare   = product?.id && isInCompare(product.id) && compareList.length >= 0
 
   useEffect(() => {
     setLoading(true)
@@ -128,6 +151,9 @@ export default function ProductDetail() {
     setQuestions([])
     setQText('')
     setFlashExpired(false)
+    setReviewPhotos([])
+    setPhotoFiles([])
+    setReviewability({ status: 'login_required' })
     // Show items viewed *before* this one, then record the current product.
     setRecentlyViewed(getRecentlyViewed().filter(rp => rp.slug !== slug).slice(0, 6))
     getProduct(slug).then(r => {
@@ -138,8 +164,12 @@ export default function ProductDetail() {
       setZoom({ on: false, x: 50, y: 50 })
       setSelectedVariant((p.variants && p.variants.length > 0) ? p.variants[0] : null)
       if (p?.id) {
-        getProductReviews(p.id).then(r2 => setReviews(r2.data.data || []))
+        getProductReviews(p.id).then(r2 => {
+          setReviews(r2.data.data || [])
+          setReviewPhotos(r2.data.photos || [])
+        })
         getProductQuestions(p.id).then(rq => setQuestions(rq.data.data || [])).catch(() => setQuestions([]))
+        getReviewability(p.id).then(rr => setReviewability(rr.data.data || { status: 'login_required' })).catch(() => {})
         getProductFilters(p.id)
           .then(r3 => setProductFilters(r3.data.data || []))
           .catch(() => setProductFilters([]))
@@ -190,11 +220,26 @@ export default function ProductDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockQty])
 
-  if (loading) return (
-    <div className="min-h-[70vh] flex items-center justify-center">
-      <Spinner size="xl" className="text-ink-tertiary" />
-    </div>
-  )
+  // Believable "viewers right now" — anchored to the product's real views_count
+  // with a small jitter that refreshes every 22s.
+  useEffect(() => {
+    if (!product?.id) return
+    const base = Math.max(3, Math.min(42, Math.floor((Number(product.views_count) || 0) / 30) + 3))
+    const tick = () => setLiveViews(base + Math.floor(Math.random() * 5) - 2)
+    tick()
+    const iv = setInterval(tick, 22000)
+    return () => clearInterval(iv)
+  }, [product?.id, product?.views_count])
+
+  // Reveal the mobile sticky CTA bar once the shopper has scrolled into the page.
+  useEffect(() => {
+    const onScroll = () => setStickyVisible(window.scrollY > 320)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  if (loading) return <ProductDetailSkeleton />
   if (!product) return null
 
   const priceModifier  = selectedVariant ? Number(selectedVariant.price_modifier || 0) : 0
@@ -207,7 +252,27 @@ export default function ProductDetail() {
   const discount = effectiveBase < basePrice
     ? Math.round((1 - effectiveBase / basePrice) * 100) : null
 
-  const images = (product.images || []).map(i => i.image_url || i).filter(Boolean)
+  // Pre-order: product has a release date in the future. Replaces Add to Cart
+  // with a Notify Me flow and disables the quantity controls.
+  const releaseDateObj = product.release_date
+    ? new Date(String(product.release_date).slice(0, 10) + 'T00:00')
+    : null
+  const isPreorder = !!releaseDateObj && releaseDateObj > new Date()
+  const releaseLabel = isPreorder
+    ? releaseDateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null
+
+  // Full media list (images + youtube + uploaded videos) for the gallery.
+  // `images` stays as plain image URLs for SEO/JSON-LD.
+  const mediaItems = (product.images || []).filter(m => {
+    if (typeof m === 'string') return true
+    if (m.media_type === 'youtube' || m.media_type === 'video') return !!m.video_url
+    return !!m.image_url
+  })
+  const images = mediaItems
+    .filter(m => !m.media_type || m.media_type === 'image')
+    .map(m => (typeof m === 'string' ? m : m.image_url))
+    .filter(Boolean)
 
   const imgUrl = (src) => {
     if (!src) return `https://placehold.co/800x800/F2F0EB/9C9894?text=No+Image`
@@ -251,6 +316,13 @@ export default function ProductDetail() {
     await dispatch(toggleWishlistThunk({ productId: product.id, wishlistItemId: isWished ? wItemId : null }))
   }
 
+  const handleCompare = () => {
+    const res = toggleCompare(product)
+    if (res.ok && res.action === 'added')   toast.success('Added to compare')
+    if (res.ok && res.action === 'removed') toast.info('Removed from compare')
+    if (!res.ok && res.reason === 'full')   toast.error(`Compare list is full (max ${COMPARE_MAX})`)
+  }
+
   const handleNotify = async (e) => {
     e.preventDefault()
     if (!notifyEmail.trim()) return
@@ -268,14 +340,39 @@ export default function ProductDetail() {
     if (!user) { toast.info('Login to write a review'); return }
     setSubmitting(true)
     try {
-      await createReview({ product_id: product.id, ...reviewForm })
-      toast.success('Review submitted!')
+      const { data } = await createReview({ product_id: product.id, ...reviewForm })
+      const newId = data?.data?.id
+      let uploaded = 0
+      if (newId && photoFiles.length) {
+        for (const f of photoFiles) {
+          try {
+            const fd = new FormData(); fd.append('photo', f)
+            await uploadReviewPhoto(newId, fd)
+            uploaded++
+          } catch { /* skip the bad file but keep the review */ }
+        }
+      }
+      if (photoFiles.length && uploaded < photoFiles.length) {
+        toast.info(`Review submitted · ${uploaded}/${photoFiles.length} photos uploaded`)
+      } else {
+        toast.success('Review submitted!')
+      }
       setReviewForm({ rating: 5, comment: '' })
+      setPhotoFiles([])
       const r = await getProductReviews(product.id)
       setReviews(r.data.data || [])
+      setReviewPhotos(r.data.photos || [])
+      getReviewability(product.id).then(rr => setReviewability(rr.data.data || {})).catch(() => {})
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit review')
     } finally { setSubmitting(false) }
+  }
+
+  const photoSrc = (src) => src && (src.startsWith('http') ? src : `/MyShop/backend/${src}`)
+  const onPickPhotos = (e) => {
+    const files = Array.from(e.target.files || [])
+    setPhotoFiles(prev => [...prev, ...files].slice(0, 4))
+    e.target.value = '' // allow re-selecting the same file
   }
 
   const handleAskQuestion = async (e) => {
@@ -297,7 +394,7 @@ export default function ProductDetail() {
   const absImg = (src) => !src ? undefined : (src.startsWith('http') ? src : `${window.location.origin}/MyShop/backend/${src}`)
 
   return (
-    <div style={{ background: '#FAFAF8' }}>
+    <div className="animate-page-in" style={{ background: '#FAFAF8' }}>
       <Seo
         title={product.name}
         description={(product.description || '').trim().slice(0, 160) || `Buy ${product.name} at MyShop.`}
@@ -330,7 +427,7 @@ export default function ProductDetail() {
       />
 
       {/* ── Breadcrumb ────────────────────────────────────── */}
-      <div className="max-w-screen-xl mx-auto px-5 md:px-10 pt-7 pb-2">
+      <div className="max-w-screen-xl mx-auto px-5 md:px-10 pt-3 md:pt-7 pb-2">
         <nav className="flex items-center gap-2 text-[11px] uppercase tracking-[0.15em] text-ink-tertiary">
           <Link to="/" className="hover:text-ink transition-colors">Home</Link>
           <span style={{ opacity: 0.35 }}>—</span>
@@ -347,107 +444,181 @@ export default function ProductDetail() {
       </div>
 
       {/* ── Main Grid ─────────────────────────────────────── */}
-      <div className="max-w-screen-xl mx-auto px-5 md:px-10 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_460px] gap-8 lg:gap-16 items-start">
+      <div className="max-w-screen-xl mx-auto px-5 md:px-10 py-3 md:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_460px] gap-4 lg:gap-16 items-start">
 
-          {/* ── Image Gallery (sticky) ─────────────────── */}
+          {/* ── Media Gallery (sticky) — swipeable carousel + thumbnails ─ */}
           <div className="lg:sticky lg:top-8">
-            {/* Main image — hover to zoom (follows the cursor) */}
             <div
-              onMouseEnter={() => { if (images[activeImg]) setZoom(z => ({ ...z, on: true })) }}
-              onMouseLeave={() => setZoom({ on: false, x: 50, y: 50 })}
-              onMouseMove={(e) => {
-                if (!images[activeImg]) return
-                const r = e.currentTarget.getBoundingClientRect()
-                setZoom(z => ({
-                  ...z,
-                  x: ((e.clientX - r.left) / r.width) * 100,
-                  y: ((e.clientY - r.top) / r.height) * 100,
-                }))
-              }}
-              style={{
-                background: '#EEECE6',
-                borderRadius: '20px',
-                overflow: 'hidden',
-                aspectRatio: '1 / 1',
-                position: 'relative',
-                cursor: images[activeImg] ? 'zoom-in' : 'default',
-              }}
+              className="animate-hero-in relative mx-auto w-full"
+              style={{ background: '#EEECE6', borderRadius: 20, overflow: 'hidden' }}
             >
-              <img
-                key={activeImg}
-                src={imgUrl(images[activeImg])}
-                alt={product.name}
-                onLoad={() => setImgLoaded(true)}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  opacity: imgLoaded ? 1 : 0,
-                  transform: zoom.on ? 'scale(2)' : 'scale(1)',
-                  transformOrigin: `${zoom.x}% ${zoom.y}%`,
-                  transition: zoom.on ? 'opacity 0.4s ease' : 'opacity 0.4s ease, transform 0.25s ease',
-                  willChange: 'transform',
-                }}
-              />
-              {/* Discount badge overlay */}
+              <div
+                ref={scrollRef}
+                onScroll={onCarouselScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+              >
+                {mediaItems.map((m, i) => {
+                  const isYT  = m.media_type === 'youtube'
+                  const isVid = m.media_type === 'video'
+                  const isImg = !isYT && !isVid
+                  const thumbSrc = typeof m === 'string' ? m : m.image_url
+                  const videoSrc = m.video_url
+                  return (
+                    <div
+                      key={i}
+                      className="shrink-0 w-full snap-start aspect-[16/10] lg:aspect-square max-h-[30vh] lg:max-h-none relative"
+                      style={{ background: '#EEECE6' }}
+                    >
+                      {isYT && (
+                        <iframe
+                          src={videoSrc}
+                          title={`${product.name} – video ${i + 1}`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
+                        />
+                      )}
+                      {isVid && (
+                        <video
+                          src={videoSrc && videoSrc.startsWith('http') ? videoSrc : `/MyShop/backend/${videoSrc}`}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          poster={thumbSrc ? imgUrl(thumbSrc) : undefined}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#000', display: 'block' }}
+                        />
+                      )}
+                      {isImg && (
+                        <img
+                          src={imgUrl(thumbSrc)}
+                          alt={product.name}
+                          loading={i === 0 ? 'eager' : 'lazy'}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Discount + Out-of-stock overlays */}
               {discount && (
                 <div style={{
-                  position: 'absolute', top: 16, left: 16,
+                  position: 'absolute', top: 14, left: 14, zIndex: 2,
                   background: '#C0392B', color: '#fff',
-                  fontSize: '11px', fontWeight: 700,
+                  fontSize: 11, fontWeight: 700,
                   letterSpacing: '0.08em', textTransform: 'uppercase',
-                  padding: '5px 10px', borderRadius: '8px',
-                }}>
-                  −{discount}%
-                </div>
+                  padding: '5px 10px', borderRadius: 8,
+                  pointerEvents: 'none',
+                }}>−{discount}%</div>
               )}
               {stockQty === 0 && (
                 <div style={{
-                  position: 'absolute', inset: 0,
+                  position: 'absolute', inset: 0, zIndex: 2,
                   background: 'rgba(250,250,248,0.6)',
                   backdropFilter: 'blur(2px)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  pointerEvents: 'none',
                 }}>
                   <span style={{
                     background: '#0F0F0F', color: '#fff',
-                    fontSize: '11px', fontWeight: 700,
+                    fontSize: 11, fontWeight: 700,
                     letterSpacing: '0.15em', textTransform: 'uppercase',
-                    padding: '10px 20px', borderRadius: '100px',
+                    padding: '10px 20px', borderRadius: 100,
                   }}>Out of Stock</span>
+                </div>
+              )}
+
+              {/* Page counter pill (mobile) */}
+              {mediaItems.length > 1 && (
+                <div className="md:hidden" style={{
+                  position: 'absolute', right: 12, bottom: 12, zIndex: 2,
+                  background: 'rgba(15,15,15,0.78)', color: '#fff',
+                  fontSize: 11, fontWeight: 700, letterSpacing: '0.05em',
+                  padding: '4px 10px', borderRadius: 999,
+                }}>
+                  {Math.min(activeImg + 1, mediaItems.length)} / {mediaItems.length}
                 </div>
               )}
             </div>
 
-            {/* Thumbnails */}
-            {images.length > 1 && (
-              <div style={{ display: 'flex', gap: '10px', marginTop: '12px', overflowX: 'auto' }}>
-                {images.map((img, i) => (
+            {/* Dot indicators (mobile only) */}
+            {mediaItems.length > 1 && (
+              <div className="md:hidden" style={{
+                display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10,
+              }}>
+                {mediaItems.map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => { setActiveImg(i); setImgLoaded(false) }}
+                    onClick={() => scrollTo(i)}
+                    aria-label={`Go to media ${i + 1}`}
                     style={{
-                      flexShrink: 0,
-                      width: '72px', height: '72px',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      border: `2px solid ${i === activeImg ? '#0F0F0F' : 'transparent'}`,
-                      background: '#EEECE6',
-                      transition: 'border-color 0.2s',
-                      cursor: 'pointer',
+                      width: i === activeImg ? 22 : 7,
+                      height: 7,
+                      borderRadius: 999,
+                      background: i === activeImg ? '#0F0F0F' : '#D4D0CB',
+                      border: 'none',
                       padding: 0,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
                     }}
-                  >
-                    <img src={imgUrl(img)} alt={`View ${i + 1}`}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </button>
+                  />
                 ))}
+              </div>
+            )}
+
+            {/* Thumbnails */}
+            {mediaItems.length > 1 && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 12, overflowX: 'auto' }}>
+                {mediaItems.map((m, i) => {
+                  const isVideo = m.media_type === 'youtube' || m.media_type === 'video'
+                  const thumb = typeof m === 'string' ? m : m.image_url
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => scrollTo(i)}
+                      style={{
+                        position: 'relative', flexShrink: 0,
+                        width: 72, height: 72, borderRadius: 12, overflow: 'hidden',
+                        border: `2px solid ${i === activeImg ? '#0F0F0F' : 'transparent'}`,
+                        background: '#EEECE6',
+                        transition: 'border-color 0.2s',
+                        cursor: 'pointer', padding: 0,
+                      }}
+                    >
+                      {thumb ? (
+                        <img src={imgUrl(thumb)} alt={`View ${i + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', background: '#1A1A1A' }} />
+                      )}
+                      {isVideo && (
+                        <span style={{
+                          position: 'absolute', inset: 0, display: 'flex',
+                          alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                        }}>
+                          <span style={{
+                            width: 24, height: 24, borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.6)', color: '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <svg style={{ width: 12, height: 12, marginLeft: 2 }} fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
 
           {/* ── Product Info ───────────────────────────── */}
-          <div style={{ animation: 'fadeIn 0.5s ease both' }}>
+          <div style={{ animation: 'slideInRight 0.75s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both' }}>
 
             {/* Category tag */}
             {product.category_name && (
@@ -490,11 +661,75 @@ export default function ProductDetail() {
               </div>
             )}
 
+            {/* Live activity pills */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+              {liveViews > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: 11, fontWeight: 600, color: '#5C5854',
+                  background: '#F4F2EC', padding: '5px 10px', borderRadius: 999,
+                }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%', background: '#16A34A',
+                    animation: 'pulseGlow 1.6s ease-in-out infinite', display: 'inline-block',
+                  }} />
+                  <span><b style={{ color: '#0F0F0F' }}>{liveViews}</b> viewing now</span>
+                </span>
+              )}
+              {Number(product.views_count) > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: 11, fontWeight: 600, color: '#5C5854',
+                  background: '#F4F2EC', padding: '5px 10px', borderRadius: 999,
+                }}>
+                  <svg style={{ width: 12, height: 12 }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  {Number(product.views_count).toLocaleString('en-US')} total views
+                </span>
+              )}
+              {product.is_trending && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: 11, fontWeight: 700, color: '#fff',
+                  background: 'linear-gradient(135deg,#F97316 0%,#C0392B 100%)',
+                  padding: '5px 10px', borderRadius: 999,
+                }}>
+                  🔥 Trending now
+                </span>
+              )}
+            </div>
+
             {/* Thin rule */}
             <div style={{ height: '1px', background: '#E4E1D9', margin: '20px 0' }} />
 
+            {/* Pre-order banner */}
+            {isPreorder && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                background: 'linear-gradient(135deg, #7C3AED 0%, #4338CA 100%)',
+                borderRadius: 14, padding: '14px 18px', marginBottom: '20px', color: '#fff',
+              }}>
+                <svg style={{ width: 24, height: 24 }} fill="currentColor" viewBox="0 0 24 24">
+                  <path fillRule="evenodd" d="M6 2a1 1 0 011 1v1h10V3a1 1 0 112 0v1h1a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h1V3a1 1 0 011-1zm14 8H4v10h16V10z" clipRule="evenodd" />
+                </svg>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    Pre-order · Coming soon
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 700 }}>
+                    Available on {releaseLabel}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, opacity: 0.85 }}>
+                    Drop your email below — we'll let you know the moment it launches.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Flash sale banner */}
-            {flash && (
+            {flash && !isPreorder && (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
                 background: 'linear-gradient(90deg, #C0392B 0%, #9B2D22 100%)',
@@ -737,24 +972,26 @@ export default function ProductDetail() {
             <div style={{ display: 'flex', gap: '10px', marginBottom: '28px' }}>
               <button
                 onClick={handleAddToCart}
-                disabled={adding || stockQty === 0}
+                disabled={adding || stockQty === 0 || isPreorder}
                 style={{
                   flex: 1,
                   height: '52px',
-                  background: stockQty === 0 ? '#E4E1D9' : '#0F0F0F',
-                  color: stockQty === 0 ? '#9C9894' : '#fff',
+                  background: isPreorder ? '#7C3AED' : stockQty === 0 ? '#E4E1D9' : '#0F0F0F',
+                  color: isPreorder ? '#fff' : stockQty === 0 ? '#9C9894' : '#fff',
                   border: 'none', borderRadius: '14px',
                   fontSize: '13px', fontWeight: 700,
                   letterSpacing: '0.08em', textTransform: 'uppercase',
-                  cursor: stockQty === 0 || adding ? 'not-allowed' : 'pointer',
+                  cursor: isPreorder || stockQty === 0 || adding ? 'not-allowed' : 'pointer',
                   opacity: adding ? 0.7 : 1,
                   transition: 'all 0.2s',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                 }}
-                onMouseEnter={e => { if (stockQty > 0 && !adding) e.currentTarget.style.background = '#2D2D2D' }}
-                onMouseLeave={e => { if (stockQty > 0) e.currentTarget.style.background = '#0F0F0F' }}
+                onMouseEnter={e => { if (!isPreorder && stockQty > 0 && !adding) e.currentTarget.style.background = '#2D2D2D' }}
+                onMouseLeave={e => { if (!isPreorder && stockQty > 0) e.currentTarget.style.background = '#0F0F0F' }}
               >
-                {adding ? (
+                {isPreorder ? (
+                  <>🗓 Coming {releaseLabel}</>
+                ) : adding ? (
                   <>
                     <svg style={{ width: 16, height: 16, animation: 'spin 0.8s linear infinite' }}
                       viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
@@ -805,19 +1042,65 @@ export default function ProductDetail() {
                     d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
               </button>
+              <button
+                onClick={handleCompare}
+                aria-label={inCompare ? 'Remove from compare' : 'Add to compare'}
+                aria-pressed={inCompare}
+                title="Compare"
+                style={{
+                  width: '52px', height: '52px',
+                  borderRadius: '14px',
+                  border: inCompare ? '2px solid #0F0F0F' : '1.5px solid #E4E1D9',
+                  background: inCompare ? '#0F0F0F' : 'transparent',
+                  color: inCompare ? '#FFFFFF' : '#9C9894',
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => {
+                  if (!inCompare) {
+                    e.currentTarget.style.borderColor = '#0F0F0F'
+                    e.currentTarget.style.color = '#0F0F0F'
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!inCompare) {
+                    e.currentTarget.style.borderColor = '#E4E1D9'
+                    e.currentTarget.style.color = '#9C9894'
+                  }
+                }}
+              >
+                <svg style={{ width: 20, height: 20 }} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h13M3 12h9M3 18h6M17 6l4 3-4 3M21 18l-4-3 4-3" />
+                </svg>
+              </button>
             </div>
 
-            {/* Back-in-stock notify (only when out of stock) */}
-            {stockQty === 0 && (
-              <div style={{ marginBottom: '24px', padding: '16px', background: '#F2F0EB', borderRadius: '14px' }}>
+            {/* Notify Me — out of stock OR pre-order */}
+            {(stockQty === 0 || isPreorder) && (
+              <div style={{
+                marginBottom: '24px', padding: '16px', borderRadius: '14px',
+                background: isPreorder ? '#F5F3FF' : '#F2F0EB',
+                border: isPreorder ? '1px solid #DDD6FE' : 'none',
+              }}>
                 {notifySent ? (
                   <p style={{ fontSize: '13px', fontWeight: 600, color: '#16A34A', margin: 0 }}>
-                    ✓ We’ll email you the moment this is back in stock.
+                    {isPreorder
+                      ? `✓ We'll email you on ${releaseLabel} — get ready!`
+                      : "✓ We'll email you the moment this is back in stock."}
                   </p>
                 ) : (
                   <>
-                    <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5C5854', marginBottom: '10px' }}>
-                      Out of stock — get notified
+                    <p style={{
+                      fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      color: isPreorder ? '#6D28D9' : '#5C5854',
+                      marginBottom: '10px',
+                    }}>
+                      {isPreorder
+                        ? `Notify me when available · ${releaseLabel}`
+                        : 'Out of stock — get notified'}
                     </p>
                     <form onSubmit={handleNotify} style={{ display: 'flex', gap: '8px' }}>
                       <input
@@ -827,7 +1110,12 @@ export default function ProductDetail() {
                         placeholder="your@email.com"
                         style={{ flex: 1, border: '1.5px solid #E4E1D9', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', outline: 'none', background: '#fff', color: '#0F0F0F' }}
                       />
-                      <button type="submit" style={{ background: '#0F0F0F', color: '#fff', border: 'none', borderRadius: '10px', padding: '0 20px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <button type="submit" style={{
+                        background: isPreorder ? '#7C3AED' : '#0F0F0F',
+                        color: '#fff', border: 'none', borderRadius: '10px',
+                        padding: '0 20px', fontSize: '13px', fontWeight: 700,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}>
                         Notify Me
                       </button>
                     </form>
@@ -959,6 +1247,33 @@ export default function ProductDetail() {
       {tab === 'reviews' && (
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '40px 20px 0' }}>
           <div style={{ maxWidth: '640px' }}>
+            {reviewPhotos.length > 0 && (
+              <div style={{ marginBottom: '28px' }}>
+                <p style={{
+                  fontSize: '10px', fontWeight: 700, letterSpacing: '0.18em',
+                  textTransform: 'uppercase', color: '#9C9894', marginBottom: '10px',
+                }}>
+                  Photos from customers · {reviewPhotos.length}
+                </p>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))',
+                  gap: 8,
+                }}>
+                  {reviewPhotos.map((p, i) => (
+                    <a key={i} href={photoSrc(p.image_url)} target="_blank" rel="noopener noreferrer"
+                      title={`From ${p.reviewer_name}`}
+                      style={{
+                        display: 'block', aspectRatio: '1/1', borderRadius: 10,
+                        overflow: 'hidden', background: '#EEECE6',
+                      }}>
+                      <img src={photoSrc(p.image_url)} alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {reviews.length === 0 ? (
               <p style={{ color: '#9C9894', fontSize: '14px' }}>No reviews yet. Be the first!</p>
             ) : (
@@ -975,14 +1290,31 @@ export default function ProductDetail() {
                           background: '#F2F0EB',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: '13px', fontWeight: 700, color: '#5C5854',
+                          overflow: 'hidden',
                         }}>
-                          {r.user_name?.[0]?.toUpperCase()}
+                          {r.avatar_url
+                            ? <img src={r.avatar_url.startsWith('http') ? r.avatar_url : `/MyShop/backend/${r.avatar_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : (r.reviewer_name?.[0]?.toUpperCase() || '?')}
                         </div>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#0F0F0F' }}>{r.user_name}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#0F0F0F' }}>{r.reviewer_name}</span>
                       </div>
                       <StarRating value={r.rating} size="sm" />
                     </div>
-                    <p style={{ fontSize: '14px', color: '#5C5854', lineHeight: 1.6, margin: '0 0 6px' }}>{r.comment}</p>
+                    <p style={{ fontSize: '14px', color: '#5C5854', lineHeight: 1.6, margin: '0 0 6px' }}>{r.body || r.comment}</p>
+                    {r.photos && r.photos.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '4px 0 8px' }}>
+                        {r.photos.map((url, idx) => (
+                          <a key={idx} href={photoSrc(url)} target="_blank" rel="noopener noreferrer"
+                            style={{
+                              width: 64, height: 64, borderRadius: 8, overflow: 'hidden',
+                              background: '#EEECE6', display: 'block',
+                            }}>
+                            <img src={photoSrc(url)} alt=""
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     <p style={{ fontSize: '11px', color: '#C8C4BC' }}>{new Date(r.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                   </div>
                 ))}
@@ -994,6 +1326,32 @@ export default function ProductDetail() {
               marginTop: '32px', padding: '28px',
               background: '#F2F0EB', borderRadius: '20px',
             }}>
+              {reviewability.status === 'login_required' && (
+                <div>
+                  <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.5rem', color: '#0F0F0F', margin: '0 0 6px' }}>Want to write a review?</p>
+                  <p style={{ fontSize: 14, color: '#5C5854', margin: 0 }}>
+                    <Link to="/login" style={{ color: '#C0392B', fontWeight: 600 }}>Sign in</Link> to share your experience.
+                  </p>
+                </div>
+              )}
+              {reviewability.status === 'no_purchase' && (
+                <div>
+                  <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.5rem', color: '#0F0F0F', margin: '0 0 6px' }}>Reviews are for customers</p>
+                  <p style={{ fontSize: 14, color: '#5C5854', margin: 0 }}>
+                    You can leave a review once you've received a delivered order for this product.
+                  </p>
+                </div>
+              )}
+              {reviewability.status === 'already_reviewed' && (
+                <div>
+                  <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.5rem', color: '#0F0F0F', margin: '0 0 6px' }}>Thanks for your review!</p>
+                  <p style={{ fontSize: 14, color: '#5C5854', margin: 0 }}>
+                    You've already reviewed this product. We appreciate it.
+                  </p>
+                </div>
+              )}
+              {reviewability.status === 'allowed' && (
+              <>
               <h3 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.5rem', fontWeight: 400, color: '#0F0F0F', margin: '0 0 20px' }}>
                 Write a Review
               </h3>
@@ -1031,6 +1389,47 @@ export default function ProductDetail() {
                   onFocus={e => e.target.style.borderColor = '#0F0F0F'}
                   onBlur={e => e.target.style.borderColor = '#E4E1D9'}
                 />
+
+                {/* Photo upload */}
+                <div style={{ marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: photoFiles.length > 0 ? 10 : 0 }}>
+                    {photoFiles.map((f, idx) => (
+                      <div key={idx} style={{ position: 'relative', width: 72, height: 72, borderRadius: 10, overflow: 'hidden', background: '#EEECE6' }}>
+                        <img src={URL.createObjectURL(f)} alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button
+                          type="button"
+                          onClick={() => setPhotoFiles(prev => prev.filter((_, i) => i !== idx))}
+                          aria-label="Remove photo"
+                          style={{
+                            position: 'absolute', top: 4, right: 4,
+                            width: 20, height: 20, borderRadius: '50%',
+                            background: 'rgba(15,15,15,0.75)', color: '#fff',
+                            border: 'none', cursor: 'pointer',
+                            fontSize: 12, lineHeight: 1, padding: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>×</button>
+                      </div>
+                    ))}
+                    {photoFiles.length < 4 && (
+                      <label style={{
+                        width: 72, height: 72, borderRadius: 10,
+                        border: '1.5px dashed #C8C4BC', background: '#FAFAF8',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        gap: 2, cursor: 'pointer', color: '#9C9894',
+                      }}>
+                        <svg style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>Photo</span>
+                        <input type="file" accept="image/*" multiple onChange={onPickPhotos} style={{ display: 'none' }} />
+                      </label>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 11, color: '#9C9894', margin: 0 }}>
+                    Add up to 4 photos (JPEG, PNG, WebP — max 5 MB each).
+                  </p>
+                </div>
                 <button
                   type="submit"
                   disabled={submitting}
@@ -1048,6 +1447,8 @@ export default function ProductDetail() {
                   {submitting ? 'Submitting…' : 'Submit Review'}
                 </button>
               </form>
+              </>
+              )}
             </div>
           </div>
         </div>
@@ -1246,6 +1647,55 @@ export default function ProductDetail() {
           </div>
         </div>
       )}
+
+      {/* ── Mobile sticky add-to-cart bar ─────────────────── */}
+      <div
+        className="md:hidden fixed left-0 right-0 z-30 transition-transform duration-300"
+        style={{
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 68px)',
+          transform: stickyVisible ? 'translateY(0)' : 'translateY(110%)',
+          background: '#fff',
+          borderTop: '1px solid rgba(0,0,0,0.06)',
+          boxShadow: '0 -6px 18px rgba(0,0,0,0.08)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+          <img
+            src={imgUrl(images[0])}
+            alt=""
+            style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', background: '#EEECE6', flexShrink: 0 }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 12, color: '#0F0F0F', fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {product.name}
+            </p>
+            <p style={{ fontSize: 14, color: '#0F0F0F', fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
+              {format(effectivePrice)}
+              {discount && (
+                <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: '#9C9894', textDecoration: 'line-through' }}>
+                  {format(basePrice)}
+                </span>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={handleAddToCart}
+            disabled={adding || stockQty === 0 || isPreorder}
+            style={{
+              height: 42, padding: '0 18px', flexShrink: 0,
+              background: isPreorder ? '#7C3AED' : stockQty === 0 ? '#E4E1D9' : '#0F0F0F',
+              color: isPreorder ? '#fff' : stockQty === 0 ? '#9C9894' : '#fff',
+              border: 'none', borderRadius: 12,
+              fontSize: 12, fontWeight: 700, letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              cursor: isPreorder || stockQty === 0 || adding ? 'not-allowed' : 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
+            {isPreorder ? 'Pre-order' : adding ? 'Adding…' : stockQty === 0 ? 'Out' : 'Add to Cart'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

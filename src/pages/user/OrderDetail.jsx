@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { getOrder, cancelOrder, getReturns, createReturn, reorderOrder } from '../../api/orderApi'
+import { getBankTransferInfo, getWhishInfo } from '../../api/paymentApi'
 import { fetchCart } from '../../store/slices/cartSlice'
 import { useToast } from '../../hooks/useToast'
 import { resolveImg } from '../../lib/img'
@@ -131,6 +132,9 @@ export default function OrderDetail() {
   const [returnSubmitting, setReturnSubmitting] = useState(false)
   const [downloading,      setDownloading]      = useState(false)
   const [reordering,       setReordering]       = useState(false)
+  const [bank,             setBank]             = useState(null)
+  const [whish,            setWhish]            = useState(null)
+  const [copied,           setCopied]           = useState(null)
 
   const handleDownloadInvoice = async () => {
     setDownloading(true)
@@ -152,7 +156,17 @@ export default function OrderDetail() {
     getReturns()
       .then(r => setReturnReq((r.data.data || []).find(x => Number(x.order_id) === Number(id)) || null))
       .catch(() => {})
+    getBankTransferInfo()
+      .then(r => setBank(r.data.data))
+      .catch(() => {})
+    getWhishInfo()
+      .then(r => setWhish(r.data.data))
+      .catch(() => {})
   }, [id])
+
+  const copyText = async (label, text) => {
+    try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(null), 1500) } catch {}
+  }
 
   const handleReturn = async (e) => {
     e.preventDefault()
@@ -233,7 +247,7 @@ export default function OrderDetail() {
   const total     = Number(order.total || 0)
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
+    <div className="max-w-3xl mx-auto px-4 py-10 animate-page-in">
 
       {/* Breadcrumb + header */}
       <div className="mb-8">
@@ -310,6 +324,119 @@ export default function OrderDetail() {
           ) : (
             <p className="text-sm font-medium" style={{ color: '#9C9894' }}>
               The 5-hour cancellation window has closed for this order.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Whish payment-pending card */}
+      {order.payment_method === 'whish' && order.payment_status !== 'paid' && whish?.enabled && whish.whish_phone && (
+        <div className="rounded-2xl p-5 mb-4" style={{ background: '#FAF5FF', border: '1px solid #E9D5FF' }}>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: '#F3E8FF' }}>📱</div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm" style={{ color: '#6D28D9' }}>Payment pending — send via Whish to complete your order</p>
+              <p className="text-xs mt-0.5" style={{ color: '#7C3AED' }}>
+                Send <span className="font-bold">{format(total)}</span> via Whish Money and include the reference number in the note.
+              </p>
+            </div>
+          </div>
+
+          {/* Reference */}
+          <div className="mt-4 p-3 rounded-xl flex items-center justify-between gap-3"
+               style={{ background: '#fff', border: '1.5px dashed #6D28D9' }}>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#9C9894' }}>Reference</p>
+              <p className="text-base font-mono font-black text-ink">MS-{order.id}</p>
+            </div>
+            <button type="button" onClick={() => copyText('ref', `MS-${order.id}`)}
+              className="text-xs font-bold uppercase tracking-wider px-3 py-2 rounded-lg shrink-0 text-white"
+              style={{ background: '#6D28D9' }}>
+              {copied === 'ref' ? 'Copied ✓' : 'Copy'}
+            </button>
+          </div>
+
+          {/* Whish details */}
+          <div className="mt-3 bg-white rounded-xl border border-black/5 divide-y divide-black/5">
+            {[
+              { label: 'Send to (Whish phone)', value: whish.whish_phone },
+              { label: 'Account name',          value: whish.whish_name },
+              { label: 'Amount',                value: `${format(total)} ${whish.currency_note ? `(${whish.currency_note})` : ''}` },
+            ].filter(r => r.value).map(r => (
+              <div key={r.label} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#9C9894' }}>{r.label}</p>
+                  <p className="text-sm font-mono font-semibold text-ink truncate">{r.value}</p>
+                </div>
+                <button type="button" onClick={() => copyText(r.label, String(r.value))}
+                  className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg shrink-0"
+                  style={{ background: '#F0EEE9', color: '#0F0F0F' }}>
+                  {copied === r.label ? '✓' : 'Copy'}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {whish.instructions && (
+            <p className="text-xs mt-3 leading-relaxed" style={{ color: '#5C5854' }}>{whish.instructions}</p>
+          )}
+        </div>
+      )}
+
+      {/* Bank transfer payment-pending card */}
+      {order.payment_method === 'bank_transfer' && order.payment_status !== 'paid' && bank?.enabled && (
+        <div className="rounded-2xl p-5 mb-4" style={{ background: '#FFFBEB', border: '1px solid #FCD34D' }}>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: '#FEF3C7' }}>🏦</div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm" style={{ color: '#92400E' }}>Payment pending — please transfer to complete your order</p>
+              <p className="text-xs mt-0.5" style={{ color: '#A16207' }}>
+                Send <span className="font-bold">{format(total)}</span> to the account below and include the reference number in the transfer description.
+              </p>
+            </div>
+          </div>
+
+          {/* Reference number — most important field */}
+          <div className="mt-4 p-3 rounded-xl flex items-center justify-between gap-3"
+               style={{ background: '#fff', border: '1.5px dashed #0F0F0F' }}>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#9C9894' }}>Reference</p>
+              <p className="text-base font-mono font-black text-ink">MS-{order.id}</p>
+            </div>
+            <button type="button" onClick={() => copyText('ref', `MS-${order.id}`)}
+              className="text-xs font-bold uppercase tracking-wider px-3 py-2 rounded-lg shrink-0"
+              style={{ background: '#0F0F0F', color: '#fff' }}>
+              {copied === 'ref' ? 'Copied ✓' : 'Copy'}
+            </button>
+          </div>
+
+          {/* Bank details */}
+          <div className="mt-3 bg-white rounded-xl border border-black/5 divide-y divide-black/5">
+            {[
+              { label: 'Bank',           value: bank.bank_name },
+              { label: 'Account name',   value: bank.account_name },
+              { label: 'Account number', value: bank.account_number },
+              { label: 'IBAN',           value: bank.iban },
+              { label: 'SWIFT',          value: bank.swift },
+              { label: 'Amount',         value: `${format(total)} ${bank.currency_note ? `(${bank.currency_note})` : ''}` },
+            ].filter(r => r.value).map(r => (
+              <div key={r.label} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#9C9894' }}>{r.label}</p>
+                  <p className="text-sm font-mono font-semibold text-ink truncate">{r.value}</p>
+                </div>
+                <button type="button" onClick={() => copyText(r.label, String(r.value))}
+                  className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg shrink-0"
+                  style={{ background: '#F0EEE9', color: '#0F0F0F' }}>
+                  {copied === r.label ? '✓' : 'Copy'}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {bank.instructions && (
+            <p className="text-xs mt-3 leading-relaxed" style={{ color: '#5C5854' }}>
+              {bank.instructions}
             </p>
           )}
         </div>
@@ -500,13 +627,20 @@ export default function OrderDetail() {
             </svg>
             <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#9C9894' }}>Shipping Address</p>
           </div>
-          {order.full_name ? (
+          {order.shipping_address ? (
             <div className="text-sm space-y-0.5" style={{ color: '#5C5854' }}>
-              <p className="font-semibold" style={{ color: '#0F0F0F' }}>{order.full_name}</p>
-              <p>{order.address_line1}{order.address_line2 ? `, ${order.address_line2}` : ''}</p>
-              <p>{order.city}{order.state ? `, ${order.state}` : ''} {order.zip}</p>
-              <p>{order.country}</p>
-              {order.phone && <p className="pt-1" style={{ color: '#9C9894' }}>{order.phone}</p>}
+              <p className="font-semibold flex items-center gap-2" style={{ color: '#0F0F0F' }}>
+                {order.shipping_address.recipient_name || '—'}
+                {order.shipping_address.label && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: '#F2F0EB', color: '#5C5854' }}>
+                    {order.shipping_address.label}
+                  </span>
+                )}
+              </p>
+              <p>{order.shipping_address.street}</p>
+              <p>{order.shipping_address.city}{order.shipping_address.state ? `, ${order.shipping_address.state}` : ''} {order.shipping_address.zip}</p>
+              <p>{order.shipping_address.country}</p>
+              {order.shipping_address.phone && <p className="pt-1" style={{ color: '#9C9894' }}>{order.shipping_address.phone}</p>}
             </div>
           ) : (
             <p className="text-sm" style={{ color: '#9C9894' }}>No address on file</p>

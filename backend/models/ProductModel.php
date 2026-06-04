@@ -88,10 +88,12 @@ class ProductModel extends BaseModel
     {
         $select = $count
             ? "SELECT COUNT(*)"
-            : "SELECT p.id, p.name, p.slug, p.base_price, p.sale_price, p.stock_qty,
+            : "SELECT p.id, p.name, p.slug, p.base_price, p.sale_price, p.stock_qty, p.low_stock_threshold, p.release_date,
                       p.is_featured, p.views_count, p.status, p.created_at,
                       c.name AS category_name,
                       (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image,
+                      (SELECT video_url  FROM product_images WHERE product_id = p.id AND media_type IN ('youtube','video') ORDER BY sort_order ASC, id ASC LIMIT 1) AS preview_video,
+                      (SELECT media_type FROM product_images WHERE product_id = p.id AND media_type IN ('youtube','video') ORDER BY sort_order ASC, id ASC LIMIT 1) AS preview_video_type,
                       (SELECT ROUND(AVG(rating),1) FROM reviews WHERE product_id = p.id) AS rating_avg,
                       (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS review_count,
                       (SELECT COUNT(*) FROM product_variants WHERE product_id = p.id) AS variant_count";
@@ -243,8 +245,20 @@ class ProductModel extends BaseModel
             $this->query("UPDATE product_images SET is_primary = 0 WHERE product_id = ?", [$productId]);
         }
         $this->query(
-            "INSERT INTO product_images (product_id, image_url, sort_order, is_primary) VALUES (?, ?, ?, ?)",
+            "INSERT INTO product_images (product_id, image_url, media_type, sort_order, is_primary) VALUES (?, ?, 'image', ?, ?)",
             [$productId, $url, $sort, $primary ? 1 : 0]
+        );
+        return $this->lastId();
+    }
+
+    /** Attach a video to a product. `poster` is the image_url thumbnail (used in
+     *  the gallery strip). `type` is 'youtube' (video_url = embed URL) or 'video'. */
+    public function addVideo(int $productId, string $type, string $videoUrl, ?string $poster, int $sort = 0): int
+    {
+        $this->query(
+            "INSERT INTO product_images (product_id, image_url, media_type, video_url, sort_order, is_primary)
+             VALUES (?, ?, ?, ?, ?, 0)",
+            [$productId, $poster ?? '', $type, $videoUrl, $sort]
         );
         return $this->lastId();
     }
@@ -312,9 +326,157 @@ class ProductModel extends BaseModel
         $this->query("UPDATE products SET views_count = views_count + 1 WHERE id = ?", [$id]);
     }
 
+    /** Used to compute a dynamic "trending" threshold per request. */
+    public function topViewsCount(): int
+    {
+        return (int) $this->query(
+            "SELECT COALESCE(MAX(views_count), 0) FROM products WHERE status = 'active'"
+        )->fetchColumn();
+    }
+
+    /** Catalogue health snapshot for the AdminProducts stat strip. */
+    public function adminStats(): array
+    {
+        $row = $this->query(
+            "SELECT
+                COUNT(*)                                                       AS total,
+                SUM(CASE WHEN status = 'active'   THEN 1 ELSE 0 END)            AS active,
+                SUM(CASE WHEN status = 'draft'    THEN 1 ELSE 0 END)            AS drafts,
+                SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END)            AS archived,
+                SUM(CASE WHEN status = 'active' AND stock_qty = 0 THEN 1 ELSE 0 END) AS out_of_stock,
+                SUM(CASE WHEN status = 'active' AND stock_qty BETWEEN 1 AND 5 THEN 1 ELSE 0 END) AS low_stock,
+                COALESCE(SUM(stock_qty * COALESCE(sale_price, base_price)), 0)  AS inventory_value
+             FROM products"
+        )->fetch();
+        return [
+            'total'           => (int) $row['total'],
+            'active'          => (int) $row['active'],
+            'drafts'          => (int) $row['drafts'],
+            'archived'        => (int) $row['archived'],
+            'out_of_stock'    => (int) $row['out_of_stock'],
+            'low_stock'       => (int) $row['low_stock'],
+            'inventory_value' => (float) $row['inventory_value'],
+        ];
+    }
+
+    public function bulkUpdateStatus(array $ids, string $status): int
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) return 0;
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        return $this->query(
+            "UPDATE products SET status = ? WHERE id IN ({$ph})",
+            [$status, ...$ids]
+        )->rowCount();
+    }
+
+    public function bulkSetFeatured(array $ids, bool $featured): int
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) return 0;
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        return $this->query(
+            "UPDATE products SET is_featured = ? WHERE id IN ({$ph})",
+            [$featured ? 1 : 0, ...$ids]
+        )->rowCount();
+    }
+
+    public function bulkDelete(array $ids): int
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) return 0;
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        return $this->query("DELETE FROM products WHERE id IN ({$ph})", $ids)->rowCount();
+    }
+
     public function featured(int $limit = 8): array
     {
         return $this->search(['featured' => true], $limit, 0);
+    }
+
+    /**
+     * Multi-seed market basket: products bought together with ANY id in $ids,
+     * ranked by co-occurrence. Excludes the seeds themselves. Powers the
+     * cart-level "Recommended for you" rail.
+     */
+    public function frequentlyBoughtWithAny(array $ids, int $limit = 6): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) return [];
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        // params: IN-clause ×2 + LIMIT
+        $params = array_merge($ids, $ids, [$limit]);
+        return $this->query(
+            "SELECT p.id, p.name, p.slug, p.base_price, p.sale_price, p.stock_qty,
+                    p.is_featured, p.views_count, p.status, p.created_at,
+                    c.name AS category_name,
+                    (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image,
+                    (SELECT video_url  FROM product_images WHERE product_id = p.id AND media_type IN ('youtube','video') ORDER BY sort_order ASC, id ASC LIMIT 1) AS preview_video,
+                    (SELECT media_type FROM product_images WHERE product_id = p.id AND media_type IN ('youtube','video') ORDER BY sort_order ASC, id ASC LIMIT 1) AS preview_video_type,
+                    (SELECT ROUND(AVG(rating),1) FROM reviews WHERE product_id = p.id) AS rating_avg,
+                    (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS review_count,
+                    (SELECT COUNT(*) FROM product_variants WHERE product_id = p.id) AS variant_count,
+                    COUNT(DISTINCT oi2.order_id) AS together_count
+             FROM order_items oi1
+             JOIN order_items oi2
+                  ON oi2.order_id   = oi1.order_id
+                 AND oi2.product_id NOT IN ({$ph})
+             JOIN products   p ON p.id = oi2.product_id
+             JOIN categories c ON c.id = p.category_id
+             WHERE oi1.product_id IN ({$ph})
+               AND p.status = 'active'
+             GROUP BY p.id, p.name, p.slug, p.base_price, p.sale_price, p.stock_qty,
+                      p.is_featured, p.views_count, p.status, p.created_at, c.name
+             ORDER BY together_count DESC, p.views_count DESC
+             LIMIT ?",
+            $params
+        )->fetchAll();
+    }
+
+    /** Distinct category ids for a set of product ids. */
+    public function categoryIdsForProducts(array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) return [];
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        return array_values(array_unique(array_map(
+            fn($r) => (int) $r['category_id'],
+            $this->query("SELECT DISTINCT category_id FROM products WHERE id IN ({$ph})", $ids)->fetchAll()
+        )));
+    }
+
+    /**
+     * Cheap, single-click add-ons that fit a budget — for the cart's
+     * "Add $X for free shipping" gap-filler suggestions. Simple (non-variant),
+     * in-stock products only.
+     */
+    public function upsellUnderPrice(float $maxPrice, array $excludeIds, int $limit = 4): array
+    {
+        $excludeIds = array_values(array_filter(array_map('intval', $excludeIds)));
+        $excludeSql = '';
+        $params     = [];
+        if ($excludeIds) {
+            $ph         = implode(',', array_fill(0, count($excludeIds), '?'));
+            $excludeSql = " AND p.id NOT IN ({$ph})";
+            $params     = $excludeIds;
+        }
+        // Effective price (sale_price OR base_price) <= maxPrice + variant_count = 0 + in stock
+        $params[] = $maxPrice;
+        $params[] = $limit;
+        return $this->query(
+            "SELECT p.id, p.name, p.slug, p.base_price, p.sale_price, p.stock_qty,
+                    (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image,
+                    (SELECT COUNT(*) FROM product_variants WHERE product_id = p.id) AS variant_count
+             FROM products p
+             WHERE p.status = 'active'
+               AND p.stock_qty > 0
+               AND (SELECT COUNT(*) FROM product_variants WHERE product_id = p.id) = 0
+               {$excludeSql}
+               AND COALESCE(p.sale_price, p.base_price) <= ?
+             ORDER BY COALESCE(p.sale_price, p.base_price) DESC, p.views_count DESC
+             LIMIT ?",
+            $params
+        )->fetchAll();
     }
 
     /**

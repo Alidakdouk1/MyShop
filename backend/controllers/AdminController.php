@@ -165,9 +165,20 @@ class AdminController
         $adminCount = (int) $db->query("SELECT COUNT(*) FROM users WHERE role='admin'")->fetchColumn();
         $products    = (int) $db->query("SELECT COUNT(*) FROM products WHERE status='active'")->fetchColumn();
 
+        // Per-product threshold. The dashboard previews up to 10; the full list
+        // lives at /api/admin/low-stock for the dedicated page.
         $lowStock = $db->query(
-            "SELECT id, name, sku, stock_qty FROM products WHERE stock_qty <= 5 AND status='active' ORDER BY stock_qty ASC LIMIT 10"
+            "SELECT p.id, p.name, p.sku, p.stock_qty, p.low_stock_threshold,
+                    (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image
+             FROM products p
+             WHERE p.stock_qty <= p.low_stock_threshold AND p.status='active'
+             ORDER BY (p.stock_qty = 0) DESC, p.stock_qty ASC, p.name ASC
+             LIMIT 10"
         )->fetchAll();
+
+        $lowStockCount = (int) $db->query(
+            "SELECT COUNT(*) FROM products WHERE stock_qty <= low_stock_threshold AND status='active'"
+        )->fetchColumn();
 
         $recentOrders = $orders->all(5, 0);
 
@@ -183,10 +194,42 @@ class AdminController
             'total_users'    => $users,
             'total_admins'   => $adminCount,
             'total_products' => $products,
-            'low_stock'      => $lowStock,
+            'low_stock'        => $lowStock,
+            'low_stock_count'  => $lowStockCount,
             'recent_orders'  => $recentOrders,
             'top_products'   => $topProducts,
         ]);
+    }
+
+    /**
+     * Full low-stock list for the dedicated /admin/low-stock page.
+     * Includes images and 30-day sales velocity so admins can prioritize restocks.
+     */
+    public function lowStock(): never
+    {
+        method('GET');
+        $this->guard();
+        $db = getDB();
+
+        $rows = $db->query(
+            "SELECT p.id, p.name, p.slug, p.sku, p.stock_qty, p.low_stock_threshold,
+                    p.base_price, p.sale_price,
+                    c.name AS category_name,
+                    (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image,
+                    (SELECT COALESCE(SUM(oi.quantity), 0)
+                     FROM order_items oi
+                     JOIN orders o ON o.id = oi.order_id
+                     WHERE oi.product_id = p.id
+                       AND o.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                       AND o.status NOT IN ('cancelled','refunded')
+                    ) AS sold_30d
+             FROM products p
+             LEFT JOIN categories c ON c.id = p.category_id
+             WHERE p.stock_qty <= p.low_stock_threshold AND p.status = 'active'
+             ORDER BY (p.stock_qty = 0) DESC, p.stock_qty ASC, p.name ASC"
+        )->fetchAll();
+
+        success(['items' => $rows, 'count' => count($rows)]);
     }
 
     public function analytics(): never
@@ -203,6 +246,48 @@ class AdminController
             'by_category'  => $orders->revenueByCategory($days, 6),
             'by_status'    => $orders->ordersByStatus($days),
         ]);
+    }
+
+    public function productsStats(): never
+    {
+        method('GET');
+        $this->guard();
+        success((new ProductModel())->adminStats());
+    }
+
+    public function ordersStats(): never
+    {
+        method('GET');
+        $this->guard();
+        success((new OrderModel())->adminStats());
+    }
+
+    /**
+     * Bulk operation on selected product ids: activate / archive / feature /
+     * unfeature / delete. Used by the AdminProducts selection bar.
+     */
+    public function bulkProducts(): never
+    {
+        method('POST');
+        $this->guard();
+        $data   = getBody();
+        $action = $data['action'] ?? '';
+        $ids    = is_array($data['ids'] ?? null) ? $data['ids'] : [];
+        if (!$ids)    error('No products selected.', 422);
+        if (!$action) error('Action is required.', 422);
+
+        $model    = new ProductModel();
+        $affected = match ($action) {
+            'activate'  => $model->bulkUpdateStatus($ids, 'active'),
+            'draft'     => $model->bulkUpdateStatus($ids, 'draft'),
+            'archive'   => $model->bulkUpdateStatus($ids, 'archived'),
+            'feature'   => $model->bulkSetFeatured($ids, true),
+            'unfeature' => $model->bulkSetFeatured($ids, false),
+            'delete'    => $model->bulkDelete($ids),
+            default     => null,
+        };
+        if ($affected === null) error('Unknown action.', 422);
+        success(['affected' => $affected], "Updated {$affected} product" . ($affected === 1 ? '' : 's') . '.');
     }
 
     // ── Abandoned carts ─────────────────────────────────────────────────────
@@ -642,7 +727,7 @@ class AdminController
         if (!$product) error('Product not found.', 404);
 
         $data   = getBody();
-        $fields = ['name','description','base_price','sale_price','stock_qty',
+        $fields = ['name','description','base_price','sale_price','stock_qty','low_stock_threshold','release_date',
                    'category_id','status','is_featured','weight','sku'];
         $update = [];
         foreach ($fields as $f) {

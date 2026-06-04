@@ -5,6 +5,8 @@ class UploadHelper
 {
     private const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     private const MAX_SIZE     = 5 * 1024 * 1024; // 5 MB
+    private const VIDEO_MIME   = ['video/mp4', 'video/webm', 'video/quicktime'];
+    private const VIDEO_MAX    = 50 * 1024 * 1024; // 50 MB
 
     public static function saveProductImage(array $file, int $productId): string
     {
@@ -24,6 +26,58 @@ class UploadHelper
         self::resize($dest, $dir, $filename);
 
         return "uploads/products/{$productId}/{$filename}";
+    }
+
+    public static function saveProductVideo(array $file, int $productId): string
+    {
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            throw new InvalidArgumentException('Upload error code: ' . $file['error']);
+        }
+        if ($file['size'] > self::VIDEO_MAX) {
+            throw new InvalidArgumentException('Video too large. Max 50 MB.');
+        }
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+        if (!in_array($mime, self::VIDEO_MIME, true)) {
+            throw new InvalidArgumentException('Invalid video type. Allowed: MP4, WebM, MOV.');
+        }
+
+        $dir = __DIR__ . "/../uploads/products/{$productId}/videos/";
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $ext = match ($mime) {
+            'video/mp4'        => 'mp4',
+            'video/webm'       => 'webm',
+            'video/quicktime'  => 'mov',
+            default            => 'mp4',
+        };
+        $filename = bin2hex(random_bytes(16)) . ".{$ext}";
+        $dest     = $dir . $filename;
+        if (!move_uploaded_file($file['tmp_name'], $dest)) {
+            throw new RuntimeException('Failed to move uploaded video');
+        }
+        return "uploads/products/{$productId}/videos/{$filename}";
+    }
+
+    public static function saveReviewImage(array $file, int $reviewId): string
+    {
+        self::validate($file);
+
+        $dir = __DIR__ . "/../uploads/reviews/{$reviewId}/";
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $ext      = self::ext($file['type']);
+        $filename = bin2hex(random_bytes(16)) . ".{$ext}";
+        $dest     = $dir . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $dest)) {
+            throw new RuntimeException('Failed to move uploaded file');
+        }
+
+        self::resize($dest, $dir, $filename);
+
+        return "uploads/reviews/{$reviewId}/{$filename}";
     }
 
     public static function saveHomepageImage(array $file): string

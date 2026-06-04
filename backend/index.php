@@ -52,4 +52,6 @@ require_once __DIR__ . '/controllers/QuestionController.php';
 require_once __DIR__ . '/controllers/FlashSaleController.php';
 require_once __DIR__ . '/controllers/CurrencyController.php';
 require_once __DIR__ . '/controllers/BundleController.php';
+require_once __DIR__ . '/controllers/ActivityController.php';
+require_once __DIR__ . '/controllers/PaymentController.php';
 require_once __DIR__ . '/routes/api.php';
