@@ -120,8 +120,33 @@ export default function Checkout() {
         items: items.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
       })
       await dispatch(clearCartThunk())
+      // Backend returns the full order row; its primary key is `id`. The old
+      // `order_id` read here was undefined, sending users to /orders/undefined.
+      const orderId = data.data.id
       toast.success('Order placed successfully!')
-      navigate(`/account/orders/${data.data.order_id}`)
+
+      // Whish payment: try to launch the Whish app — only on mobile, since
+      // desktop browsers can't open whish:// and would just log a console
+      // error and bother the user with an "external app?" prompt.
+      const isMobile = typeof navigator !== 'undefined'
+        && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+
+      if (form.payment_method === 'whish' && whish?.enabled && isMobile) {
+        const deeplink = (whish.whish_deeplink || 'whish://').trim()
+        if (deeplink) {
+          const a = document.createElement('a')
+          a.href = deeplink
+          a.rel  = 'noopener noreferrer'
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+        }
+        // Give the OS ~800ms to switch to Whish before we navigate this tab.
+        setTimeout(() => navigate(`/account/orders/${orderId}`, { state: { justPlaced: true } }), 800)
+        return
+      }
+
+      navigate(`/account/orders/${orderId}`, { state: { justPlaced: true } })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Checkout failed')
     } finally { setLoading(false) }

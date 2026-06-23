@@ -45,6 +45,18 @@ if (match_route('/api/auth/google', $path, $params)) {
 if (match_route('/api/auth/me', $path, $params)) {
     (new AuthController())->me();
 }
+if (match_route('/api/auth/2fa/setup', $path, $params)) {
+    (new AuthController())->setupTwoFactor();
+}
+if (match_route('/api/auth/2fa/enable', $path, $params)) {
+    (new AuthController())->enableTwoFactor();
+}
+if (match_route('/api/auth/2fa/disable', $path, $params)) {
+    (new AuthController())->disableTwoFactor();
+}
+if (match_route('/api/auth/2fa/verify-login', $path, $params)) {
+    (new AuthController())->verifyTwoFactorLogin();
+}
 
 // ── Categories ───────────────────────────────────────────────
 if (match_route('/api/categories', $path, $params)) {
@@ -55,6 +67,93 @@ if (match_route('/api/categories/flat', $path, $params)) {
 }
 if (match_route('/api/categories/sections', $path, $params)) {
     (new ProductController())->categorySections();
+}
+
+// ── Search ───────────────────────────────────────────────────
+if (match_route('/api/search/by-image', $path, $params)) {
+    (new SearchController())->byImage();
+}
+
+// ── Marketplace (user classifieds) ──────────────────────────
+// Admin routes first so /admin/marketplace isn't swallowed by /{id} patterns.
+if (match_route('/api/admin/marketplace/settings', $path, $params)) {
+    (new MarketplaceController())->adminSettings();
+}
+if (match_route('/api/admin/marketplace', $path, $params)) {
+    (new MarketplaceController())->adminIndex();
+}
+if (match_route('/api/admin/marketplace/{id}/status', $path, $params)) {
+    (new MarketplaceController())->adminSetStatus((int) $params['id']);
+}
+if (match_route('/api/admin/marketplace/{id}/feature', $path, $params)) {
+    (new MarketplaceController())->adminSetFeatured((int) $params['id']);
+}
+// Literal sub-paths before the {id} catch-all.
+if (match_route('/api/marketplace/settings', $path, $params)) {
+    (new MarketplaceController())->getSettings();
+}
+if (match_route('/api/marketplace/mine', $path, $params)) {
+    (new MarketplaceController())->mine();
+}
+if (match_route('/api/marketplace', $path, $params)) {
+    if ($method === 'GET')  (new MarketplaceController())->index();
+    if ($method === 'POST') (new MarketplaceController())->store();
+}
+if (match_route('/api/marketplace/{id}/image', $path, $params)) {
+    (new MarketplaceController())->uploadImage((int) $params['id']);
+}
+if (match_route('/api/marketplace/{id}/sold', $path, $params)) {
+    (new MarketplaceController())->markSold((int) $params['id']);
+}
+if (match_route('/api/marketplace/{id}/report', $path, $params)) {
+    (new MarketplaceController())->report((int) $params['id']);
+}
+if (match_route('/api/marketplace/{id}/renew', $path, $params)) {
+    (new MarketplaceController())->renew((int) $params['id']);
+}
+if (match_route('/api/marketplace/{id}', $path, $params)) {
+    if ($method === 'GET')    (new MarketplaceController())->show((int) $params['id']);
+    if ($method === 'PUT')    (new MarketplaceController())->update((int) $params['id']);
+    if ($method === 'DELETE') (new MarketplaceController())->destroy((int) $params['id']);
+}
+
+// ── Reels (vertical video feed of products) ─────────────────
+if (match_route('/api/reels', $path, $params)) {
+    (new ReelsController())->index();
+}
+if (match_route('/api/reels/settings', $path, $params)) {
+    (new ReelsController())->getSettings();
+}
+if (match_route('/api/admin/reels/settings', $path, $params)) {
+    (new ReelsController())->adminSettings();
+}
+if (match_route('/api/reels/{id}/view', $path, $params)) {
+    (new ReelsController())->recordView((int) $params['id']);
+}
+if (match_route('/api/reels/{id}/comments', $path, $params)) {
+    if ($method === 'GET')  (new ReelsController())->listComments((int) $params['id']);
+    if ($method === 'POST') (new ReelsController())->addComment((int) $params['id']);
+}
+if (match_route('/api/reels/comments/{id}', $path, $params)) {
+    if ($method === 'DELETE') (new ReelsController())->deleteComment((int) $params['id']);
+}
+if (match_route('/api/admin/reels', $path, $params)) {
+    (new ReelsController())->adminList();
+}
+if (match_route('/api/admin/reels/reorder', $path, $params)) {
+    (new ReelsController())->adminReorder();
+}
+if (match_route('/api/admin/reels/{id}/pin', $path, $params)) {
+    (new ReelsController())->adminPin((int) $params['id']);
+}
+
+// ── Web Push ─────────────────────────────────────────────────
+if (match_route('/api/push/public-key', $path, $params)) {
+    (new PushController())->publicKey();
+}
+if (match_route('/api/push/subscriptions', $path, $params)) {
+    if ($method === 'POST')   (new PushController())->subscribe();
+    if ($method === 'DELETE') (new PushController())->unsubscribe();
 }
 
 // ── Products (public + admin write) ──────────────────────────
@@ -87,6 +186,9 @@ if (match_route('/api/products/{id}/reviewability', $path, $params)) {
 }
 if (match_route('/api/products/{id}/notify-me', $path, $params)) {
     if ($method === 'POST') (new StockNotificationController())->subscribe((int) $params['id']);
+}
+if (match_route('/api/products/{id}/notify-me/push', $path, $params)) {
+    if ($method === 'POST') (new StockNotificationController())->subscribePush((int) $params['id']);
 }
 if (match_route('/api/products/{id}/filters', $path, $params)) {
     if ($method === 'GET')                          (new FilterController())->showForProduct((int) $params['id']);
@@ -169,6 +271,12 @@ if (match_route('/api/admin/returns/{id}', $path, $params)) {
 if (match_route('/api/users/profile', $path, $params)) {
     (new UserController())->profile();
 }
+if (match_route('/api/users/stats', $path, $params)) {
+    if ($method === 'GET') (new UserController())->stats();
+}
+if (match_route('/api/users/avatar', $path, $params)) {
+    if ($method === 'POST') (new UserController())->uploadAvatar();
+}
 if (match_route('/api/users/addresses', $path, $params)) {
     if ($method === 'GET')  (new UserController())->addresses();
     if ($method === 'POST') (new UserController())->storeAddress();
@@ -210,7 +318,41 @@ if (match_route('/api/wishlist', $path, $params)) {
         if (!$pid) error('product_id required.', 422);
         $item = $wl->add((int) $auth['sub'], $pid);
         if (!$item) error('Could not add to wishlist.', 500);
+
+        // Auto-watch: if the product is out of stock, silently subscribe this
+        // user to the back-in-stock list using their account email. When the
+        // admin later restocks, the existing fan-out emails / pushes every
+        // wisher. Customer doesn't have to remember to tap "Notify me".
+        $product = (new ProductModel())->findById($pid);
+        if ($product && (int) ($product['stock_qty'] ?? 0) <= 0) {
+            $userEmail = getDB()->prepare("SELECT email FROM users WHERE id = ?");
+            $userEmail->execute([(int) $auth['sub']]);
+            $email = (string) $userEmail->fetchColumn();
+            if ($email) {
+                (new StockNotificationModel())->subscribe($pid, strtolower($email));
+            }
+        }
+
         success($item, 'Added to wishlist.', 201);
+    }
+}
+// Sharing — MUST come before /api/wishlist/{id} so "share" doesn't get parsed as an id.
+if (match_route('/api/wishlist/share', $path, $params)) {
+    $auth = AuthMiddleware::require();
+    $wl   = new WishlistModel();
+    if ($method === 'GET') {
+        $row = getDB()->prepare("SELECT wishlist_share_token FROM users WHERE id = ?");
+        $row->execute([(int) $auth['sub']]);
+        $tok = $row->fetchColumn();
+        success(['token' => $tok ?: null]);
+    }
+    if ($method === 'POST') {
+        $token = $wl->ensureShareToken((int) $auth['sub']);
+        success(['token' => $token], 'Sharing enabled.');
+    }
+    if ($method === 'DELETE') {
+        $wl->clearShareToken((int) $auth['sub']);
+        success(null, 'Sharing disabled.');
     }
 }
 if (match_route('/api/wishlist/{id}', $path, $params)) {
@@ -218,6 +360,21 @@ if (match_route('/api/wishlist/{id}', $path, $params)) {
     if ($method === 'DELETE') {
         (new WishlistModel())->remove((int) $params['id'], (int) $auth['sub']);
         success(null, 'Removed from wishlist.');
+    }
+}
+// Public — anyone with the link can view, no auth.
+if (match_route('/api/wishlists/shared/{token}', $path, $params)) {
+    if ($method === 'GET') {
+        $wl    = new WishlistModel();
+        $token = (string) $params['token'];
+        $owner = $wl->findUserByShareToken($token);
+        if (!$owner) error('Wishlist not found or sharing was disabled.', 404);
+        // Surname is stripped for privacy — only the first name shows publicly.
+        $first = explode(' ', trim((string) $owner['name']))[0];
+        success([
+            'owner_name' => $first,
+            'items'      => $wl->forUser((int) $owner['id']),
+        ]);
     }
 }
 
@@ -230,9 +387,15 @@ if (match_route('/api/admin/coupons', $path, $params)) {
     if ($method === 'POST') (new CouponController())->adminStore();
 }
 
-// ── Sitemap (public XML) ──────────────────────────────────────
+// ── Sitemap (public XML) + robots.txt ─────────────────────────
 if (match_route('/sitemap.xml', $path, $params)) {
     (new SitemapController())->index();
+}
+if (match_route('/robots.txt', $path, $params)) {
+    (new SitemapController())->robots();
+}
+if (match_route('/api/admin/seo/stats', $path, $params)) {
+    if ($method === 'GET') (new SitemapController())->stats();
 }
 
 // ── Newsletter ────────────────────────────────────────────────
@@ -251,6 +414,19 @@ if (match_route('/api/admin/newsletter', $path, $params)) {
 if (match_route('/api/admin/newsletter/popup', $path, $params)) {
     if ($method === 'GET') (new NewsletterController())->adminGetPopup();
     if ($method === 'PUT') (new NewsletterController())->adminUpdatePopup();
+}
+// Campaigns. Order matters — /campaigns/{id}/send must come BEFORE /campaigns/{id}.
+if (match_route('/api/admin/newsletter/campaigns', $path, $params)) {
+    if ($method === 'GET')  (new NewsletterController())->adminCampaignsIndex();
+    if ($method === 'POST') (new NewsletterController())->adminCampaignStore();
+}
+if (match_route('/api/admin/newsletter/campaigns/{id}/send', $path, $params)) {
+    if ($method === 'POST') (new NewsletterController())->adminCampaignSend((int) $params['id']);
+}
+if (match_route('/api/admin/newsletter/campaigns/{id}', $path, $params)) {
+    if ($method === 'GET')    (new NewsletterController())->adminCampaignShow((int) $params['id']);
+    if ($method === 'PUT')    (new NewsletterController())->adminCampaignUpdate((int) $params['id']);
+    if ($method === 'DELETE') (new NewsletterController())->adminCampaignDestroy((int) $params['id']);
 }
 
 // ── Payment: bank transfer ────────────────────────────────────
@@ -282,6 +458,72 @@ if (match_route('/api/admin/abandoned-carts', $path, $params)) {
 if (match_route('/api/admin/low-stock', $path, $params)) {
     if ($method === 'GET') (new AdminController())->lowStock();
 }
+
+// ── Admin — Abandoned cart recovery ───────────────────────────
+if (match_route('/api/admin/abandoned-cart/settings', $path, $params)) {
+    if ($method === 'GET') (new AbandonedCartController())->adminGetSettings();
+    if ($method === 'PUT') (new AbandonedCartController())->adminUpdateSettings();
+}
+if (match_route('/api/admin/abandoned-cart/pending', $path, $params)) {
+    if ($method === 'GET') (new AbandonedCartController())->adminPending();
+}
+if (match_route('/api/admin/abandoned-cart/{id}/send', $path, $params)) {
+    if ($method === 'POST') (new AbandonedCartController())->adminSend((int) $params['id']);
+}
+
+// ── Promotions (admin only — engine runs server-side on cart/checkout) ─
+if (match_route('/api/admin/promotions', $path, $params)) {
+    if ($method === 'GET')  (new PromotionController())->adminIndex();
+    if ($method === 'POST') (new PromotionController())->adminStore();
+}
+if (match_route('/api/admin/promotions/{id}', $path, $params)) {
+    if ($method === 'PUT')    (new PromotionController())->adminUpdate((int) $params['id']);
+    if ($method === 'DELETE') (new PromotionController())->adminDestroy((int) $params['id']);
+}
+
+// ── Testimonials (public + admin) ─────────────────────────────
+if (match_route('/api/testimonials', $path, $params)) {
+    if ($method === 'GET') (new TestimonialController())->publicIndex();
+}
+if (match_route('/api/admin/testimonials', $path, $params)) {
+    if ($method === 'GET')  (new TestimonialController())->adminIndex();
+    if ($method === 'POST') (new TestimonialController())->adminStore();
+}
+// "candidates" specific before {id}
+if (match_route('/api/admin/testimonials/candidates', $path, $params)) {
+    if ($method === 'GET') (new TestimonialController())->adminCandidates();
+}
+if (match_route('/api/admin/testimonials/{id}', $path, $params)) {
+    if ($method === 'PUT')    (new TestimonialController())->adminUpdate((int) $params['id']);
+    if ($method === 'DELETE') (new TestimonialController())->adminDestroy((int) $params['id']);
+}
+
+// ── WhatsApp order notifications (admin templates only) ──────
+if (match_route('/api/admin/whatsapp-notifications', $path, $params)) {
+    if ($method === 'GET') (new WhatsAppNotifyController())->adminGet();
+    if ($method === 'PUT') (new WhatsAppNotifyController())->adminUpdate();
+}
+if (match_route('/api/admin/whatsapp-notifications/events', $path, $params)) {
+    if ($method === 'GET') (new WhatsAppNotifyController())->adminGetEvents();
+}
+
+// ── Sales banner (public + admin) ─────────────────────────────
+if (match_route('/api/sales-banner', $path, $params)) {
+    if ($method === 'GET') (new SalesBannerController())->publicGet();
+}
+if (match_route('/api/admin/sales-banner', $path, $params)) {
+    if ($method === 'GET') (new SalesBannerController())->adminGet();
+    if ($method === 'PUT') (new SalesBannerController())->adminUpdate();
+}
+
+// ── Shipping estimate (public + admin) ────────────────────────
+if (match_route('/api/shipping-estimate', $path, $params)) {
+    if ($method === 'GET') (new ShippingEstimateController())->publicGet();
+}
+if (match_route('/api/admin/shipping-estimate', $path, $params)) {
+    if ($method === 'GET') (new ShippingEstimateController())->adminGet();
+    if ($method === 'PUT') (new ShippingEstimateController())->adminUpdate();
+}
 if (match_route('/api/admin/analytics', $path, $params)) {
     if ($method === 'GET') (new AdminController())->analytics();
 }
@@ -294,9 +536,21 @@ if (match_route('/api/admin/users', $path, $params)) {
 if (match_route('/api/admin/users/{id}/role', $path, $params)) {
     if ($method === 'PUT') (new AdminController())->updateUserRole((int) $params['id']);
 }
+if (match_route('/api/admin/users/{id}/vip', $path, $params)) {
+    if ($method === 'PUT') (new AdminController())->setVipLevel((int) $params['id']);
+}
+if (match_route('/api/admin/users/{id}/notes', $path, $params)) {
+    if ($method === 'GET')  (new AdminController())->listNotes((int) $params['id']);
+    if ($method === 'POST') (new AdminController())->addNote((int) $params['id']);
+}
 if (match_route('/api/admin/users/{id}', $path, $params)) {
+    if ($method === 'GET')    (new AdminController())->userDetail((int) $params['id']);
     if ($method === 'PUT')    (new AdminController())->updateUser((int) $params['id']);
     if ($method === 'DELETE') (new AdminController())->deleteUser((int) $params['id']);
+}
+if (match_route('/api/admin/notes/{id}', $path, $params)) {
+    if ($method === 'PUT')    (new AdminController())->updateNote((int) $params['id']);
+    if ($method === 'DELETE') (new AdminController())->deleteNote((int) $params['id']);
 }
 
 // ── Admin — Admins ────────────────────────────────────────────
@@ -345,6 +599,9 @@ if (match_route('/api/admin/orders', $path, $params)) {
 if (match_route('/api/admin/orders/{id}/status', $path, $params)) {
     if ($method === 'PUT') (new AdminController())->updateOrderStatus((int) $params['id']);
 }
+if (match_route('/api/admin/orders/{id}/tracking', $path, $params)) {
+    if ($method === 'PUT') (new AdminController())->updateOrderTracking((int) $params['id']);
+}
 
 // ── Admin — Products ──────────────────────────────────────────
 if (match_route('/api/admin/products', $path, $params)) {
@@ -363,6 +620,9 @@ if (match_route('/api/admin/products/stats', $path, $params)) {
 }
 if (match_route('/api/admin/products/bulk', $path, $params)) {
     if ($method === 'POST') (new AdminController())->bulkProducts();
+}
+if (match_route('/api/admin/orders/bulk', $path, $params)) {
+    if ($method === 'POST') (new AdminController())->bulkOrders();
 }
 if (match_route('/api/admin/products/{id}/media', $path, $params)) {
     if ($method === 'POST') (new ProductController())->uploadMedia((int) $params['id']);

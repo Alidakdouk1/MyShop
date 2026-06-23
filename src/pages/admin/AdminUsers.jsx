@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getAdminUsers, deleteAdminUser, createAdminUser, updateAdminUser } from '../../api/adminApi'
 import { useToast } from '../../hooks/useToast'
-import Spinner from '../../components/ui/Spinner'
+import { SkeletonBox } from '../../components/ui/Skeleton'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import Modal from '../../components/ui/Modal'
+import CustomerDetailDrawer, { VipBadge } from '../../components/admin/CustomerDetailDrawer'
 
 const AVATAR_COLORS = ['#C0392B','#0284C7','#16A34A','#B8922E','#7C3AED','#DB2777']
 const avatarColor = (name = '') => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]
@@ -59,13 +60,16 @@ export default function AdminUsers() {
   const [deleting, setDeleting] = useState(null)
   const [saving,   setSaving]   = useState(false)
   const [modal,    setModal]    = useState(null)
+  const [drawerId, setDrawerId] = useState(null)
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     getAdminUsers()
       .then(r => setUsers(r.data.data || []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { refresh() }, [refresh])
 
   const handleDelete = async (user) => {
     if (!confirm(`Delete "${user.name}"? This cannot be undone.`)) return
@@ -147,15 +151,29 @@ export default function AdminUsers() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Spinner size="xl" className="text-ink-tertiary" /></div>
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="grid grid-cols-12 items-center px-6 py-4 gap-3" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+              <div className="col-span-4 flex items-center gap-3">
+                <SkeletonBox height={36} width={36} style={{ borderRadius: '50%' }} />
+                <SkeletonBox height={14} width="60%" />
+              </div>
+              <div className="col-span-3"><SkeletonBox height={12} width="80%" /></div>
+              <div className="col-span-2"><SkeletonBox height={12} width="60%" /></div>
+              <div className="col-span-1"><SkeletonBox height={12} width={24} /></div>
+              <div className="col-span-2 flex justify-end"><SkeletonBox height={28} width={70} style={{ borderRadius: 999 }} /></div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
           {/* Table header */}
           <div className="grid grid-cols-12 px-6 py-3 text-[11px] font-bold tracking-[0.12em] uppercase" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', color: '#9C9894', background: '#FAFAF8' }}>
-            <div className="col-span-5">Customer</div>
-            <div className="col-span-4">Email</div>
+            <div className="col-span-4">Customer</div>
+            <div className="col-span-3">Email</div>
             <div className="col-span-2">Joined</div>
-            <div className="col-span-1 text-right">Actions</div>
+            <div className="col-span-1 text-center">Notes</div>
+            <div className="col-span-2 text-right">Actions</div>
           </div>
 
           {filtered.length === 0 ? (
@@ -175,7 +193,7 @@ export default function AdminUsers() {
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
                     {/* Customer */}
-                    <div className="col-span-5 flex items-center gap-3 min-w-0">
+                    <div className="col-span-4 flex items-center gap-3 min-w-0">
                       <div
                         className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold uppercase shrink-0 text-white"
                         style={{ background: ac }}
@@ -183,21 +201,46 @@ export default function AdminUsers() {
                         {u.name?.[0] || '?'}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate" style={{ color: '#0F0F0F' }}>{u.name}</p>
+                        <p className="font-semibold text-sm truncate flex items-center gap-1.5" style={{ color: '#0F0F0F' }}>
+                          {u.name}
+                          <VipBadge level={u.vip_level} />
+                        </p>
                         <p className="text-xs truncate" style={{ color: '#9C9894' }}>ID #{u.id}</p>
                       </div>
                     </div>
 
                     {/* Email */}
-                    <div className="col-span-4 text-sm truncate pr-4" style={{ color: '#5C5854' }}>{u.email}</div>
+                    <div className="col-span-3 text-sm truncate pr-4" style={{ color: '#5C5854' }}>{u.email}</div>
 
                     {/* Joined */}
                     <div className="col-span-2 text-xs" style={{ color: '#9C9894' }}>
                       {new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
 
+                    {/* Notes count */}
+                    <div className="col-span-1 flex items-center justify-center">
+                      {Number(u.notes_count) > 0 ? (
+                        <span
+                          className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#FEF3C7', color: '#92400E' }}
+                          title={`${u.notes_count} note${Number(u.notes_count) === 1 ? '' : 's'}`}
+                        >
+                          {u.notes_count}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-ink-tertiary">—</span>
+                      )}
+                    </div>
+
                     {/* Actions */}
-                    <div className="col-span-1 flex items-center justify-end gap-2">
+                    <div className="col-span-2 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setDrawerId(u.id)}
+                        className="text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all hover:opacity-80"
+                        style={{ background: '#0F0F0F', color: '#fff' }}
+                      >
+                        Profile
+                      </button>
                       <button
                         onClick={() => setModal({ type: 'edit', user: u })}
                         className="text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all hover:opacity-80"
@@ -230,6 +273,14 @@ export default function AdminUsers() {
           <UserForm initial={modal.user} onSave={handleUpdate} onCancel={() => setModal(null)} saving={saving} />
         )}
       </Modal>
+
+      {drawerId && (
+        <CustomerDetailDrawer
+          userId={drawerId}
+          onClose={() => setDrawerId(null)}
+          onChange={refresh}
+        />
+      )}
     </div>
   )
 }

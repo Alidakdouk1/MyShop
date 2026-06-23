@@ -6,6 +6,7 @@ import { addToCartThunk } from '../store/slices/cartSlice'
 import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../context/CurrencyContext'
 import StarRating from '../components/common/StarRating'
+import EmptyState from '../components/common/EmptyState'
 
 const imgUrl = (src) => {
   if (!src) return 'https://placehold.co/600x600/F2F0EB/9C9894?text=Product'
@@ -151,19 +152,14 @@ export default function Compare() {
 
   if (!list.length) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-20 text-center">
-        <div className="inline-flex w-16 h-16 rounded-full bg-surface-alt items-center justify-center mb-4 text-ink-tertiary">
-          <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h13M3 12h9M3 18h6M17 6l4 3-4 3M21 18l-4-3 4-3" />
-          </svg>
-        </div>
-        <h1 className="text-2xl font-bold text-ink mb-2">Nothing to compare yet</h1>
-        <p className="text-ink-tertiary mb-6">
-          Tap the compare icon on any product card to add up to {COMPARE_MAX} items here.
-        </p>
-        <Link to="/shop" className="inline-block bg-ink text-white font-semibold px-6 py-3 rounded-xl hover:bg-ink/90 transition-colors">
-          Browse products
-        </Link>
+      <div className="max-w-3xl mx-auto px-4 py-12">
+        <EmptyState
+          accent="navy"
+          title="Nothing to compare yet"
+          description={`Tap the compare icon on any product card to line up to ${COMPARE_MAX} items side-by-side. Specs, price, rating — all in one view.`}
+          primary={{   label: "Browse Products",     to: "/shop" }}
+          secondary={{ label: "Top Picks This Week", to: "/shop?sort=popular" }}
+        />
       </div>
     )
   }

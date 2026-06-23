@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { subscribeNewsletter } from '../../api/newsletterApi'
 import { useToast } from '../../hooks/useToast'
+import { useI18n } from '../../i18n/I18nContext'
+import Logo from '../brand/Logo'
 
 function NewsletterSignup() {
   const toast = useToast()
@@ -55,28 +57,40 @@ function NewsletterSignup() {
   )
 }
 
-const LINKS = {
-  Shop: [
-    { label: 'All Products', to: '/shop' },
-    { label: 'New Arrivals', to: '/shop?sort=newest' },
-    { label: 'Sale',         to: '/shop?on_sale=1' },
-    { label: 'Categories',   to: '/shop' },
-  ],
-  Account: [
-    { label: 'My Orders',   to: '/account/orders' },
-    { label: 'Profile',     to: '/account/profile' },
-    { label: 'Wishlist',    to: '/account/wishlist' },
-    { label: 'Sign Up',        to: '/register' },
-  ],
-  Support: [
-    { label: 'Help Center',  to: '#' },
-    { label: 'Returns',      to: '#' },
-    { label: 'Track Order',  to: '/account/orders' },
-    { label: 'Contact Us',   to: '#' },
-  ],
+function buildLinks(t) {
+  return [
+    {
+      titleKey: 'footer.shop',
+      links: [
+        { label: t('nav.shop'),        to: '/shop' },
+        { label: t('nav.new_arrivals'),to: '/shop?sort=newest' },
+        { label: t('nav.sale'),        to: '/shop?on_sale=1' },
+      ],
+    },
+    {
+      titleKey: 'nav.account',
+      links: [
+        { label: t('nav.orders'),    to: '/account/orders' },
+        { label: t('nav.profile'),   to: '/account/profile' },
+        { label: t('nav.wishlist'),  to: '/account/wishlist' },
+        { label: t('auth.sign_up'),  to: '/register' },
+      ],
+    },
+    {
+      titleKey: 'footer.help',
+      links: [
+        { label: t('footer.faq'),      to: '#' },
+        { label: t('footer.shipping'), to: '#' },
+        { label: t('nav.orders'),      to: '/account/orders' },
+        { label: t('footer.contact'),  to: '#' },
+      ],
+    },
+  ]
 }
 
 export default function Footer() {
+  const { t }  = useI18n()
+  const groups = buildLinks(t)
   return (
     <footer className="bg-ink text-white mt-20">
       {/* Premium accent rule */}
@@ -86,9 +100,9 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-12">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <span className="hero-display text-3xl tracking-wider">MY<span className="text-accent">SHOP</span></span>
+            <Logo variant="dark" size={40} showTag={false} />
             <p className="text-sm text-white/60 mt-3 leading-relaxed max-w-xs">
-              A modern online shop with curated products and a seamless shopping experience.
+              {t('footer.about_body')}
             </p>
             <div className="flex gap-3 mt-5">
               {['M', 'T', 'I', 'F'].map(s => (
@@ -100,11 +114,11 @@ export default function Footer() {
           </div>
 
           {/* Links */}
-          {Object.entries(LINKS).map(([title, links]) => (
-            <div key={title}>
-              <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-4">{title}</p>
+          {groups.map(g => (
+            <div key={g.titleKey}>
+              <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-4">{t(g.titleKey)}</p>
               <ul className="space-y-2.5">
-                {links.map(l => (
+                {g.links.map(l => (
                   <li key={l.label}>
                     <Link to={l.to} className="text-sm text-white/70 hover:text-white transition-colors">
                       {l.label}
@@ -117,10 +131,10 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-white/40">© {new Date().getFullYear()} MyShop. All rights reserved.</p>
+          <p className="text-sm text-white/40">© <span data-bidi-isolate>{new Date().getFullYear()}</span> Pick&amp;Go LB. {t('footer.rights')}</p>
           <div className="flex items-center gap-6">
-            <Link to="#" className="text-xs text-white/40 hover:text-white/70 transition-colors">Privacy Policy</Link>
-            <Link to="#" className="text-xs text-white/40 hover:text-white/70 transition-colors">Terms of Service</Link>
+            <Link to="#" className="text-xs text-white/40 hover:text-white/70 transition-colors">{t('footer.privacy')}</Link>
+            <Link to="#" className="text-xs text-white/40 hover:text-white/70 transition-colors">{t('footer.terms')}</Link>
             <div className="flex items-center gap-2">
               {['VISA', 'MC', 'AMEX', 'STRIPE'].map(p => (
                 <span key={p} className="text-[10px] font-bold bg-white/10 text-white/50 px-2 py-1 rounded">{p}</span>

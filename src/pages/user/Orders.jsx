@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getOrders } from '../../api/orderApi'
 import { resolveImg } from '../../lib/img'
-import Spinner from '../../components/ui/Spinner'
+import { OrderRowSkeleton } from '../../components/ui/Skeleton'
+import EmptyState from '../../components/common/EmptyState'
 import Pagination from '../../components/common/Pagination'
 
 const STATUSES = [
@@ -65,22 +66,18 @@ export default function Orders() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-24"><Spinner size="xl" className="text-ink-tertiary" /></div>
-      ) : orders.length === 0 ? (
-        <div className="text-center py-24">
-          <div className="w-20 h-20 rounded-full bg-surface-alt flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-ink-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M20 7H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM16 3H8l-1 4h10l-1-4z" />
-            </svg>
-          </div>
-          <p className="font-semibold text-ink text-lg mb-1">No orders yet</p>
-          <p className="text-sm text-ink-tertiary mb-6">Your order history will appear here</p>
-          <Link to="/shop"
-            className="inline-block bg-ink text-white px-7 py-2.5 rounded-full text-sm font-bold hover:opacity-80 transition-opacity">
-            Start Shopping
-          </Link>
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => <OrderRowSkeleton key={i} />)}
         </div>
+      ) : orders.length === 0 ? (
+        <EmptyState
+          title={tab ? 'No orders here yet' : 'No orders yet'}
+          description={tab
+            ? `You don't have any ${tab} orders right now. Switch tabs above to see other statuses.`
+            : "Your first order is one tap away. Browse our top deals or pick up where you left off."}
+          primary={{   label: "Start Shopping",        to: "/shop" }}
+          secondary={{ label: "Browse Top Deals",      to: "/shop?on_sale=1" }}
+        />
       ) : (
         <div className="space-y-3">
           {orders.map(order => {

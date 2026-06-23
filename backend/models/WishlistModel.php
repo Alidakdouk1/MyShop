@@ -71,4 +71,45 @@ class WishlistModel extends BaseModel
             "SELECT id FROM wishlists WHERE user_id = ? AND product_id = ?", [$userId, $productId]
         )->fetchColumn();
     }
+
+    // ── Public sharing ────────────────────────────────────────────────────
+
+    /**
+     * Generate (or return) a stable share token for this user. Idempotent:
+     * tapping Share repeatedly returns the same token so existing links
+     * keep working.
+     */
+    public function ensureShareToken(int $userId): string
+    {
+        $row = $this->query("SELECT wishlist_share_token FROM users WHERE id = ?", [$userId])->fetch();
+        if ($row && !empty($row['wishlist_share_token'])) {
+            return (string) $row['wishlist_share_token'];
+        }
+        // 16 hex chars = 64 bits of entropy. The UNIQUE index catches the
+        // astronomically-unlikely collision; we retry a few times just in case.
+        for ($i = 0; $i < 5; $i++) {
+            $token = bin2hex(random_bytes(8));
+            try {
+                $this->query("UPDATE users SET wishlist_share_token = ? WHERE id = ?", [$token, $userId]);
+                return $token;
+            } catch (PDOException) {
+                // Collision (or no-op race) — retry.
+            }
+        }
+        throw new RuntimeException('Could not generate share token.');
+    }
+
+    public function clearShareToken(int $userId): void
+    {
+        $this->query("UPDATE users SET wishlist_share_token = NULL WHERE id = ?", [$userId]);
+    }
+
+    public function findUserByShareToken(string $token): ?array
+    {
+        $row = $this->query(
+            "SELECT id, name FROM users WHERE wishlist_share_token = ? LIMIT 1",
+            [$token]
+        )->fetch();
+        return $row ?: null;
+    }
 }

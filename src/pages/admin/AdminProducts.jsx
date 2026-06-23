@@ -4,7 +4,7 @@ import { getAdminProducts, adminDeleteProduct, adminUpdateProduct, exportProduct
 import { getCategoriesFlat } from '../../api/productApi'
 import { resolveImg } from '../../lib/img'
 import { useToast } from '../../hooks/useToast'
-import Spinner from '../../components/ui/Spinner'
+import { TableRowSkeleton } from '../../components/ui/Skeleton'
 import Pagination from '../../components/common/Pagination'
 
 const STATUS_STYLE = {
@@ -126,19 +126,39 @@ export default function AdminProducts() {
     return n
   })
 
-  const runBulk = async (action) => {
+  const runBulk = async (action, extra = {}) => {
     const ids = [...selectedIds]
     if (!ids.length) return
     if (action === 'delete' && !confirm(`Permanently delete ${ids.length} product${ids.length === 1 ? '' : 's'}?`)) return
     setBulkBusy(true)
     try {
-      const { data } = await bulkProductAction(ids, action)
+      const { data } = await bulkProductAction(ids, action, extra)
       toast.success(data?.message || 'Done')
       setSelectedIds(new Set())
       load(); loadStats()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Bulk action failed')
     } finally { setBulkBusy(false) }
+  }
+
+  // Bulk price adjust — prompt for percent (positive = bump, negative = discount).
+  const runPriceAdjust = () => {
+    const raw = window.prompt(
+      `Adjust price by what percent?\nUse a positive number to bump (e.g. 10 for +10%),\nor a negative number to discount (e.g. -15 for -15%).`,
+      '-10'
+    )
+    if (raw === null) return
+    const pct = parseFloat(raw)
+    if (!Number.isFinite(pct) || pct === 0) {
+      toast.error('Enter a non-zero percentage')
+      return
+    }
+    if (pct <= -100) {
+      toast.error('Percent must be greater than -100')
+      return
+    }
+    if (!confirm(`Apply ${pct > 0 ? '+' : ''}${pct}% to ${selectedIds.size} product${selectedIds.size === 1 ? '' : 's'}? This rewrites their base + sale prices.`)) return
+    runBulk('price_adjust', { percent: pct })
   }
 
   // Inline edit (price / stock)
@@ -237,6 +257,7 @@ export default function AdminProducts() {
             <button onClick={() => runBulk('archive')}   disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(156,152,148,0.2)', color: '#D4D0CB' }}>Archive</button>
             <button onClick={() => runBulk('feature')}   disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(184,146,46,0.2)',  color: '#F5D77F' }}>Feature</button>
             <button onClick={() => runBulk('unfeature')} disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>Unfeature</button>
+            <button onClick={runPriceAdjust}              disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(0,209,193,0.18)', color: '#7EEDDF' }}>Price ±%</button>
             <button onClick={() => runBulk('delete')}    disabled={bulkBusy} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: 'rgba(192,57,43,0.25)', color: '#FCA5A5' }}>Delete</button>
           </div>
         </div>
@@ -346,7 +367,15 @@ export default function AdminProducts() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Spinner size="xl" className="text-ink-tertiary" /></div>
+        <div className="rounded-2xl overflow-hidden mb-4" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
+              <tbody className="divide-y divide-border">
+                {Array.from({ length: 8 }).map((_, i) => <TableRowSkeleton key={i} cells={7} />)}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : products.length === 0 ? (
         <div className="rounded-2xl py-20 text-center" style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)' }}>
           <p className="text-sm font-medium mb-2" style={{ color: '#9C9894' }}>No products found</p>

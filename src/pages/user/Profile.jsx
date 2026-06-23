@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/slices/authSlice'
-import { updateProfile, getAddresses, addAddress, updateAddress, deleteAddress } from '../../api/userApi'
+import {
+  updateProfile, getAddresses, addAddress, updateAddress, deleteAddress,
+  getProfile, getUserStats, uploadAvatar,
+} from '../../api/userApi'
 import { useToast } from '../../hooks/useToast'
+import TwoFactorCard from '../../components/auth/TwoFactorCard'
+import PushNotificationsCard from '../../components/notifications/PushNotificationsCard'
+import { useI18n } from '../../i18n/I18nContext'
+import { useCurrency } from '../../context/CurrencyContext'
 
 /* ── Icons ──────────────────────────────────────────────────── */
 const IcoUser = () => (
@@ -36,15 +43,45 @@ const IcoCheck = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
   </svg>
 )
+const IcoBell = () => (
+  <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" />
+  </svg>
+)
+const IcoGlobe = () => (
+  <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/><path strokeLinecap="round" strokeLinejoin="round" d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+  </svg>
+)
+const IcoActivity = () => (
+  <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+  </svg>
+)
+const IcoShield = () => (
+  <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </svg>
+)
+const IcoCamera = () => (
+  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+)
 
 const SECTIONS = [
-  { id: 'personal',  label: 'Personal Info', Icon: IcoUser },
-  { id: 'security',  label: 'Security',      Icon: IcoLock },
-  { id: 'addresses', label: 'Addresses',     Icon: IcoPin  },
+  { id: 'personal',      label: 'Personal Info',  Icon: IcoUser },
+  { id: 'notifications', label: 'Notifications',  Icon: IcoBell },
+  { id: 'preferences',   label: 'Preferences',    Icon: IcoGlobe },
+  { id: 'security',      label: 'Security',       Icon: IcoLock },
+  { id: 'addresses',     label: 'Addresses',      Icon: IcoPin  },
+  { id: 'activity',      label: 'Activity',       Icon: IcoActivity },
+  { id: 'privacy',       label: 'Privacy',        Icon: IcoShield },
 ]
 
 /* ── Reusable field ──────────────────────────────────────────── */
-function Field({ label, hint, ...props }) {
+function Field({ label, hint, disabled, ...props }) {
   const [focused, setFocused] = useState(false)
   return (
     <div>
@@ -57,19 +94,124 @@ function Field({ label, hint, ...props }) {
       }}>{label}</label>
       <input
         {...props}
+        disabled={disabled}
         onFocus={e => { setFocused(true); props.onFocus?.(e) }}
         onBlur={e => { setFocused(false); props.onBlur?.(e) }}
         style={{
           width: '100%', height: '50px', padding: '0 16px',
           border: `1.5px solid ${focused ? '#0F0F0F' : '#E4E1D9'}`,
           borderRadius: '13px', fontSize: '14px',
-          color: '#0F0F0F', background: focused ? '#fff' : '#FAFAF8',
+          color: disabled ? '#9C9894' : '#0F0F0F',
+          background: disabled ? '#F2F0EB' : (focused ? '#fff' : '#FAFAF8'),
+          cursor: disabled ? 'not-allowed' : 'text',
           outline: 'none', transition: 'all 0.2s',
           fontFamily: "'Figtree', sans-serif",
           boxSizing: 'border-box',
         }}
       />
       {hint && <p style={{ fontSize: '11px', color: '#9C9894', marginTop: '5px' }}>{hint}</p>}
+    </div>
+  )
+}
+
+/* ── Stats banner — small 4-tile grid showing key account numbers ─ */
+function StatsBanner({ stats, profile, compact = false }) {
+  if (!stats) return null
+  const items = [
+    { label: 'Orders',       value: stats.total_orders ?? 0 },
+    { label: 'Spent',        value: `$${Number(stats.lifetime_value || 0).toFixed(0)}` },
+    { label: 'Reviews',      value: stats.reviews_written ?? 0 },
+    { label: 'Member since', value: profile?.created_at
+        ? new Date(String(profile.created_at).replace(' ', 'T')).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        : '—'
+    },
+  ]
+  return (
+    <div className="p-stats" style={{
+      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+      gap: compact ? 8 : 12, marginBottom: 16,
+    }}>
+      {items.map(i => (
+        <div key={i.label} style={{
+          background: '#fff', border: '1px solid #E4E1D9', borderRadius: 14,
+          padding: compact ? '10px 12px' : '14px 16px',
+          textAlign: 'center',
+        }}>
+          <p style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.18em',
+            textTransform: 'uppercase', color: '#9C9894',
+            margin: 0, lineHeight: 1.2,
+          }}>{i.label}</p>
+          <p style={{
+            fontSize: compact ? 16 : 20, fontWeight: 800,
+            color: '#0F172A', margin: '6px 0 0',
+            fontVariantNumeric: 'tabular-nums',
+          }}>{i.value}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── Verification badge ──────────────────────────────────────── */
+function VerifyBadge({ label, verified, optional }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+      padding: '3px 8px', borderRadius: 999,
+      background:  verified ? '#DCFCE7' : (optional ? '#F2F0EB' : '#FEF2F2'),
+      color:       verified ? '#15803D' : (optional ? '#9C9894' : '#C0392B'),
+    }}>
+      {verified ? '✓' : optional ? '○' : '!'} {label}
+    </span>
+  )
+}
+
+/* ── Notification toggle row (Apple-style switch) ─────────────── */
+function NotifToggle({ title, sub, checked, onChange }) {
+  return (
+    <label style={{
+      display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer',
+      padding: '14px 4px', borderBottom: '1px solid #F2F0EB',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0F0F0F' }}>{title}</p>
+        {sub && <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9C9894', lineHeight: 1.4 }}>{sub}</p>}
+      </div>
+      <input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)}
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }} />
+      {/* The track */}
+      <span style={{
+        position: 'relative', flexShrink: 0,
+        width: 42, height: 24, borderRadius: 999,
+        background: checked ? '#00D1C1' : '#E4E1D9',
+        transition: 'background 0.2s',
+      }}>
+        {/* The thumb */}
+        <span style={{
+          position: 'absolute', top: 2, left: checked ? 20 : 2,
+          width: 20, height: 20, borderRadius: '50%', background: '#fff',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+          transition: 'left 0.2s',
+        }} />
+      </span>
+    </label>
+  )
+}
+
+/* ── Info row for the Activity tab ───────────────────────────── */
+function InfoRow({ label, value }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      padding: '12px 0', borderBottom: '1px solid #F2F0EB', gap: 12,
+    }}>
+      <span style={{ fontSize: 13, color: '#9C9894' }}>{label}</span>
+      <span style={{
+        fontSize: 14, fontWeight: 600, color: '#0F0F0F',
+        fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+      }}>{value}</span>
     </div>
   )
 }
@@ -152,10 +294,32 @@ function Card({ children, style }) {
 export default function Profile() {
   const user  = useSelector(selectUser)
   const toast = useToast()
+  const { locale, setLocale } = useI18n()
+  const { current: currency, setCurrency, currencies } = useCurrency()
 
-  const [section,     setSection]     = useState('personal')
-  const [form,        setForm]        = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '' })
-  const [pwForm,      setPwForm]      = useState({ current_password: '', password: '', password_confirm: '' })
+  const [section, setSection] = useState('personal')
+  // Extended personal form — adds birthday + gender on top of the legacy fields.
+  const [form, setForm] = useState({
+    name: user?.name || '', email: user?.email || '', phone: user?.phone || '',
+    birthday: '', gender: '',
+  })
+  const [pwForm, setPwForm] = useState({ current_password: '', password: '', password_confirm: '' })
+  // Notification preferences — booleans rendered as toggle switches.
+  const [notif, setNotif] = useState({
+    email_order: 1, email_marketing: 0, whatsapp_order: 0, sms_order: 0,
+  })
+  // Communication preferences — language + currency are stored against the user
+  // so they persist across devices.
+  const [prefs, setPrefs] = useState({ preferred_language: '', preferred_currency: '' })
+  // Avatar — current URL + upload state.
+  const [avatarUrl,  setAvatarUrl]  = useState(user?.avatar_url || '')
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const avatarInputRef = useRef(null)
+  // Account stats — loaded once for the dashboard header.
+  const [stats, setStats] = useState(null)
+  // Server-side profile snapshot — also used for member_since, last_login_at.
+  const [profile, setProfile] = useState(null)
+
   const [saving,      setSaving]      = useState(false)
   const [addresses,   setAddresses]   = useState([])
   const [addrModal,   setAddrModal]   = useState(null)
@@ -164,6 +328,28 @@ export default function Profile() {
   const [addrLoaded,  setAddrLoaded]  = useState(false)
 
   const strength = pwScore(pwForm.password)
+
+  // Load the full profile + stats once on mount so every section has the data
+  // it needs without separate fetches.
+  useEffect(() => {
+    getProfile().then(r => {
+      const p = r.data.data
+      setProfile(p)
+      setForm(f => ({
+        ...f,
+        name: p.name || '', email: p.email || '', phone: p.phone || '',
+        birthday: p.birthday ? String(p.birthday).slice(0, 10) : '',
+        gender: p.gender || '',
+      }))
+      setNotif(p.notification_prefs || notif)
+      setPrefs({
+        preferred_language: p.preferred_language || '',
+        preferred_currency: p.preferred_currency || '',
+      })
+      setAvatarUrl(p.avatar_url || '')
+    }).catch(() => {})
+    getUserStats().then(r => setStats(r.data.data)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (section === 'addresses' && !addrLoaded) {
@@ -179,9 +365,65 @@ export default function Profile() {
   /* handlers */
   const saveProfile = async (e) => {
     e.preventDefault(); setSaving(true)
-    try { await updateProfile(form); toast.success('Profile updated!') }
+    try {
+      // Submit the new fields too. The backend's allowlist handles null safely.
+      await updateProfile({
+        name: form.name,
+        phone: form.phone,
+        birthday: form.birthday || null,
+        gender: form.gender || null,
+      })
+      toast.success('Profile updated!')
+    }
     catch (err) { toast.error(err.response?.data?.message || 'Update failed') }
     finally { setSaving(false) }
+  }
+
+  const saveNotifications = async (e) => {
+    e.preventDefault(); setSaving(true)
+    try {
+      await updateProfile({ notification_prefs: notif })
+      toast.success('Notification preferences saved')
+    }
+    catch (err) { toast.error(err.response?.data?.message || 'Failed') }
+    finally { setSaving(false) }
+  }
+
+  const savePreferences = async (e) => {
+    e.preventDefault(); setSaving(true)
+    try {
+      await updateProfile({
+        preferred_language: prefs.preferred_language || null,
+        preferred_currency: prefs.preferred_currency || null,
+      })
+      // Live-apply so the UI flips immediately, not only after the next reload.
+      if (prefs.preferred_language) setLocale(prefs.preferred_language)
+      if (prefs.preferred_currency) setCurrency(prefs.preferred_currency)
+      toast.success('Preferences saved')
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed') }
+    finally { setSaving(false) }
+  }
+
+  const onPickAvatar = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Quick client-side size guard so we don't even try a 20 MB upload.
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image too large (max 5 MB)'); return
+    }
+    setAvatarBusy(true)
+    try {
+      const fd = new FormData(); fd.append('avatar', file)
+      const r = await uploadAvatar(fd)
+      setAvatarUrl(r.data.data.avatar_url)
+      toast.success('Avatar updated')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Upload failed')
+    } finally {
+      setAvatarBusy(false)
+      // Allow re-selecting the same file.
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
   }
 
   const savePassword = async (e) => {
@@ -227,20 +469,39 @@ export default function Profile() {
       {/* Top accent bar */}
       <div style={{ height: '3px', background: 'linear-gradient(90deg, #0F0F0F 0%, #C0392B 45%, #B8922E 100%)' }} />
 
+      {/* Responsive overrides — inline styles can't use breakpoints, so the
+          two-column desktop layout is collapsed to a single column on phones
+          and the vertical sidebar nav becomes a horizontal scrolling tab strip. */}
+      <style>{`
+        @media (max-width: 820px) {
+          .profile-grid    { grid-template-columns: 1fr !important; gap: 16px !important; }
+          .profile-sidebar { position: static !important; }
+          .profile-identity { padding: 22px 22px 18px !important; }
+          .profile-nav     { display: flex !important; overflow-x: auto; gap: 6px; padding: 12px 12px !important;
+                             scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+          .profile-nav::-webkit-scrollbar { display: none; }
+          .profile-nav-btn { width: auto !important; flex: 0 0 auto; margin-bottom: 0 !important; white-space: nowrap; }
+          .profile-nav-chevron { display: none !important; }
+          .profile-foot    { display: none !important; }
+          .p-2col          { grid-template-columns: 1fr !important; }
+          .p-stats         { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+      `}</style>
+
       <div style={{ maxWidth: '1080px', margin: '0 auto', padding: '44px 20px 80px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '28px', alignItems: 'start' }}>
+        <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '28px', alignItems: 'start' }}>
 
           {/* ══ SIDEBAR ══════════════════════════════════════════════ */}
-          <aside style={{ background: '#0F0F0F', borderRadius: '22px', overflow: 'hidden', position: 'sticky', top: '24px' }}>
+          <aside className="profile-sidebar" style={{ background: '#0F0F0F', borderRadius: '22px', overflow: 'hidden', position: 'sticky', top: '24px' }}>
 
             {/* Identity card */}
-            <div style={{ padding: '32px 26px 26px', borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'relative', overflow: 'hidden' }}>
+            <div className="profile-identity" style={{ padding: '32px 26px 26px', borderBottom: '1px solid rgba(255,255,255,0.07)', position: 'relative', overflow: 'hidden' }}>
               {/* Decorative glow */}
               <div style={{ position: 'absolute', top: -50, right: -50, width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle, rgba(192,57,43,0.25) 0%, transparent 70%)', pointerEvents: 'none' }} />
               <div style={{ position: 'absolute', bottom: -30, left: -30, width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(circle, rgba(184,146,46,0.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
               {/* Avatar */}
-              <div style={{ position: 'relative', width: 70, height: 70, marginBottom: 18 }}>
+              <div className="profile-avatar-wrap" style={{ position: 'relative', width: 70, height: 70, marginBottom: 18 }}>
                 {/* Gradient ring */}
                 <div style={{ position: 'absolute', inset: -3, borderRadius: '50%', background: 'linear-gradient(135deg, #C0392B 0%, #B8922E 100%)', opacity: 0.8 }} />
                 <div style={{ position: 'absolute', inset: -1, borderRadius: '50%', background: '#0F0F0F' }} />
@@ -277,11 +538,11 @@ export default function Profile() {
             </div>
 
             {/* Nav */}
-            <nav style={{ padding: '14px 14px 8px' }}>
+            <nav className="profile-nav" style={{ padding: '14px 14px 8px' }}>
               {SECTIONS.map(({ id, label, Icon }) => {
                 const active = section === id
                 return (
-                  <button key={id} onClick={() => setSection(id)} style={{
+                  <button key={id} onClick={() => setSection(id)} className="profile-nav-btn" style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 11,
                     padding: '11px 13px', borderRadius: 12,
                     border: 'none', marginBottom: 2,
@@ -301,14 +562,14 @@ export default function Profile() {
                     )}
                     <Icon />
                     <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, flex: 1 }}>{label}</span>
-                    {active && <span style={{ opacity: 0.4 }}><IcoChevron /></span>}
+                    {active && <span className="profile-nav-chevron" style={{ opacity: 0.4 }}><IcoChevron /></span>}
                   </button>
                 )
               })}
             </nav>
 
             {/* Footer */}
-            <div style={{ padding: '12px 26px 24px' }}>
+            <div className="profile-foot" style={{ padding: '12px 26px 24px' }}>
               <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', lineHeight: 1.6, margin: 0 }}>
                 Member since {new Date().getFullYear()}
               </p>
@@ -322,13 +583,208 @@ export default function Profile() {
             {section === 'personal' && (
               <div style={{ animation: 'fadeIn 0.28s ease both' }}>
                 <SectionHead eyebrow="Account Settings" title="Personal Info" />
+
+                {/* Stats banner — shows on top of Personal Info so the dashboard
+                    feel is visible immediately on landing. */}
+                {stats && <StatsBanner stats={stats} profile={profile} />}
+
+                {/* Avatar upload + verification badges card */}
+                <Card style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative' }}>
+                      <div style={{
+                        width: 84, height: 84, borderRadius: '50%',
+                        background: avatarUrl
+                          ? `url(${avatarUrl.startsWith('http') ? avatarUrl : `/MyShop/backend/${avatarUrl}`}) center/cover`
+                          : 'linear-gradient(135deg, #00D1C1 0%, #A3FF12 100%)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontWeight: 800, fontSize: 28,
+                        boxShadow: '0 8px 24px rgba(15,15,15,0.12)',
+                      }}>
+                        {!avatarUrl && initials}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={avatarBusy}
+                        aria-label="Change avatar"
+                        style={{
+                          position: 'absolute', bottom: -2, right: -2,
+                          width: 30, height: 30, borderRadius: '50%',
+                          background: '#0F172A', color: '#fff',
+                          border: '3px solid #fff', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <IcoCamera />
+                      </button>
+                      <input
+                        ref={avatarInputRef} type="file" accept="image/*"
+                        onChange={onPickAvatar}
+                        style={{ display: 'none' }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: 700, fontSize: 16, color: '#0F0F0F', margin: 0 }}>{user?.name}</p>
+                      <p style={{ fontSize: 12, color: '#9C9894', margin: '2px 0 8px' }}>{user?.email}</p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        <VerifyBadge label="Email" verified={!!profile?.is_verified} />
+                        <VerifyBadge label="Phone" verified={!!profile?.phone_verified_at} optional />
+                        {(profile?.vip_level && profile.vip_level !== 'regular') && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+                            padding: '3px 8px', borderRadius: 999,
+                            background: profile.vip_level === 'gold' ? '#FEF9EC' : '#F5F3FF',
+                            color:      profile.vip_level === 'gold' ? '#B8922E' : '#7C3AED',
+                          }}>{profile.vip_level}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
                 <Card>
                   <form onSubmit={saveProfile} style={{ display: 'grid', gap: 20 }}>
                     <Field label="Full Name"     value={form.name}  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}  required />
-                    <Field label="Email Address" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
+                    <Field label="Email Address" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required disabled
+                      hint="Email is used for sign-in. Contact support to change it." />
                     <Field label="Phone Number"  type="tel"   value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+
+                    <div className="p-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <Field label="Date of Birth" type="date" value={form.birthday}
+                        onChange={e => setForm(f => ({ ...f, birthday: e.target.value }))}
+                        hint="Optional. Powers birthday surprises 🎁" />
+                      <div>
+                        <label style={{
+                          display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.18em',
+                          textTransform: 'uppercase', color: '#9C9894', marginBottom: 7,
+                        }}>Gender</label>
+                        <select
+                          value={form.gender}
+                          onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}
+                          style={{
+                            width: '100%', height: 50, padding: '0 14px',
+                            border: '1.5px solid #E4E1D9', borderRadius: 13,
+                            fontSize: 14, color: '#0F0F0F', background: '#FAFAF8',
+                            outline: 'none',
+                          }}
+                        >
+                          <option value="">— Select —</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                          <option value="other">Other</option>
+                          <option value="prefer_not_say">Prefer not to say</option>
+                        </select>
+                      </div>
+                    </div>
+
                     <div style={{ paddingTop: 20, borderTop: '1px solid #F2F0EB', display: 'flex', justifyContent: 'flex-end' }}>
                       <SaveBtn type="submit" loading={saving}>Save Changes</SaveBtn>
+                    </div>
+                  </form>
+                </Card>
+              </div>
+            )}
+
+            {/* ── Notifications ──────────────────────────────────── */}
+            {section === 'notifications' && (
+              <div style={{ animation: 'fadeIn 0.28s ease both' }}>
+                <SectionHead eyebrow="Account Settings" title="Notifications" />
+                {stats && <StatsBanner stats={stats} profile={profile} compact />}
+                <Card>
+                  <p style={{ fontSize: 13, color: '#5C5854', margin: '0 0 18px', lineHeight: 1.6 }}>
+                    Choose how you want to hear from us. You can change these any time.
+                  </p>
+                  <form onSubmit={saveNotifications} style={{ display: 'grid', gap: 4 }}>
+                    <NotifToggle
+                      title="Order updates by email"
+                      sub="Confirmation, payment, shipping, delivery."
+                      checked={!!notif.email_order}
+                      onChange={v => setNotif(n => ({ ...n, email_order: v ? 1 : 0 }))}
+                    />
+                    <NotifToggle
+                      title="Order updates by WhatsApp"
+                      sub="Get the same milestones via WhatsApp."
+                      checked={!!notif.whatsapp_order}
+                      onChange={v => setNotif(n => ({ ...n, whatsapp_order: v ? 1 : 0 }))}
+                    />
+                    <NotifToggle
+                      title="Order updates by SMS"
+                      sub="Carrier fees may apply."
+                      checked={!!notif.sms_order}
+                      onChange={v => setNotif(n => ({ ...n, sms_order: v ? 1 : 0 }))}
+                    />
+                    <NotifToggle
+                      title="Marketing &amp; new arrivals"
+                      sub="Occasional emails about deals, drops, and curated picks. Unsubscribe any time."
+                      checked={!!notif.email_marketing}
+                      onChange={v => setNotif(n => ({ ...n, email_marketing: v ? 1 : 0 }))}
+                    />
+
+                    <div style={{ paddingTop: 20, marginTop: 12, borderTop: '1px solid #F2F0EB', display: 'flex', justifyContent: 'flex-end' }}>
+                      <SaveBtn type="submit" loading={saving}>Save Preferences</SaveBtn>
+                    </div>
+                  </form>
+                </Card>
+
+                {/* Push notifications — separate card so the opt-in flow has
+                    breathing room. The hook drives a state machine inside. */}
+                <PushNotificationsCard />
+              </div>
+            )}
+
+            {/* ── Preferences (language + currency) ──────────────── */}
+            {section === 'preferences' && (
+              <div style={{ animation: 'fadeIn 0.28s ease both' }}>
+                <SectionHead eyebrow="Account Settings" title="Preferences" />
+                <Card>
+                  <p style={{ fontSize: 13, color: '#5C5854', margin: '0 0 18px', lineHeight: 1.6 }}>
+                    Set your default language and currency. These follow your account everywhere you sign in.
+                  </p>
+                  <form onSubmit={savePreferences} style={{ display: 'grid', gap: 18 }}>
+                    <div>
+                      <label style={{
+                        display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.18em',
+                        textTransform: 'uppercase', color: '#9C9894', marginBottom: 7,
+                      }}>Language</label>
+                      <select
+                        value={prefs.preferred_language || locale}
+                        onChange={e => setPrefs(p => ({ ...p, preferred_language: e.target.value }))}
+                        style={{
+                          width: '100%', height: 50, padding: '0 14px',
+                          border: '1.5px solid #E4E1D9', borderRadius: 13,
+                          fontSize: 14, color: '#0F0F0F', background: '#FAFAF8',
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="en">English</option>
+                        <option value="ar">العربية (Arabic)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{
+                        display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '0.18em',
+                        textTransform: 'uppercase', color: '#9C9894', marginBottom: 7,
+                      }}>Currency</label>
+                      <select
+                        value={prefs.preferred_currency || currency?.code || 'USD'}
+                        onChange={e => setPrefs(p => ({ ...p, preferred_currency: e.target.value }))}
+                        style={{
+                          width: '100%', height: 50, padding: '0 14px',
+                          border: '1.5px solid #E4E1D9', borderRadius: 13,
+                          fontSize: 14, color: '#0F0F0F', background: '#FAFAF8',
+                          outline: 'none',
+                        }}
+                      >
+                        {(currencies || [{ code: 'USD', name: 'US Dollar' }]).map(c => (
+                          <option key={c.code} value={c.code}>{c.symbol ? `${c.symbol} ` : ''}{c.code} — {c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ paddingTop: 20, borderTop: '1px solid #F2F0EB', display: 'flex', justifyContent: 'flex-end' }}>
+                      <SaveBtn type="submit" loading={saving}>Save Preferences</SaveBtn>
                     </div>
                   </form>
                 </Card>
@@ -383,6 +839,9 @@ export default function Profile() {
                     </div>
                   </form>
                 </Card>
+
+                {/* Two-factor authentication */}
+                <TwoFactorCard />
 
                 {/* Danger zone */}
                 <div style={{ marginTop: 24, border: '1px solid #FEE2E2', borderRadius: 20, padding: '24px 28px', background: '#FFF9F9' }}>
@@ -455,7 +914,7 @@ export default function Profile() {
                     </p>
                   </Card>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div className="p-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     {addresses.map((a, i) => (
                       <div key={a.id} style={{
                         background: '#fff',
@@ -513,6 +972,109 @@ export default function Profile() {
                 )}
               </div>
             )}
+
+            {/* ── Activity ───────────────────────────────────────── */}
+            {section === 'activity' && (
+              <div style={{ animation: 'fadeIn 0.28s ease both' }}>
+                <SectionHead eyebrow="Account Settings" title="Activity" />
+                {stats && <StatsBanner stats={stats} profile={profile} />}
+
+                <Card>
+                  <p style={{ fontSize: 13, color: '#5C5854', margin: '0 0 18px', lineHeight: 1.6 }}>
+                    Recent account activity and lifetime stats.
+                  </p>
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    <InfoRow
+                      label="Last sign-in"
+                      value={profile?.last_login_at
+                        ? new Date(String(profile.last_login_at).replace(' ', 'T')).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+                        : '—'}
+                    />
+                    <InfoRow
+                      label="Member since"
+                      value={profile?.created_at
+                        ? new Date(String(profile.created_at).replace(' ', 'T')).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                        : '—'}
+                    />
+                    <InfoRow label="Total orders"     value={stats?.total_orders ?? '—'} />
+                    <InfoRow label="Lifetime spent"   value={stats != null ? `$${Number(stats.lifetime_value || 0).toFixed(2)}` : '—'} />
+                    <InfoRow label="Reviews written"  value={stats?.reviews_written ?? '—'} />
+                    <InfoRow label="Saved addresses"  value={stats?.addresses_count ?? '—'} />
+                    <InfoRow label="Wishlist items"   value={stats?.wishlist_count ?? '—'} />
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* ── Privacy ────────────────────────────────────────── */}
+            {section === 'privacy' && (
+              <div style={{ animation: 'fadeIn 0.28s ease both' }}>
+                <SectionHead eyebrow="Account Settings" title="Privacy" />
+                <Card style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.4rem', fontWeight: 400, color: '#0F0F0F', margin: '0 0 8px' }}>
+                    Your data
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#5C5854', margin: '0 0 16px', lineHeight: 1.6 }}>
+                    Request a copy of all the personal data we hold about you. We'll email you a JSON archive within 30 days.
+                  </p>
+                  <button
+                    onClick={() => toast.info('Data export request sent. We will email you within 30 days.')}
+                    style={{
+                      height: 42, padding: '0 18px',
+                      background: '#F2F0EB', color: '#0F0F0F', border: 'none', borderRadius: 12,
+                      fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      cursor: 'pointer', fontFamily: "'Figtree', sans-serif",
+                    }}
+                  >
+                    Request data export
+                  </button>
+                </Card>
+
+                <Card style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.4rem', fontWeight: 400, color: '#0F0F0F', margin: '0 0 8px' }}>
+                    Wishlist sharing
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#5C5854', margin: '0 0 16px', lineHeight: 1.6 }}>
+                    Control whether others can view your wishlist via a public link.
+                  </p>
+                  <a
+                    href="/account/wishlist"
+                    style={{
+                      display: 'inline-block',
+                      height: 42, padding: '0 18px',
+                      background: '#F2F0EB', color: '#0F0F0F', borderRadius: 12,
+                      fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      lineHeight: '42px', textDecoration: 'none',
+                      fontFamily: "'Figtree', sans-serif",
+                    }}
+                  >
+                    Manage on Wishlist page
+                  </a>
+                </Card>
+
+                {/* Danger zone */}
+                <div style={{ border: '1px solid #FEE2E2', borderRadius: 20, padding: '24px 28px', background: '#FFF9F9' }}>
+                  <h3 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.15rem', fontWeight: 400, color: '#C0392B', margin: '0 0 6px' }}>
+                    Delete account
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#9C9894', margin: '0 0 16px', lineHeight: 1.5 }}>
+                    Permanently delete your account and all associated data. This action cannot be undone.
+                  </p>
+                  <button
+                    onClick={() => toast.info('Please contact support to delete your account.')}
+                    style={{
+                      height: 38, padding: '0 18px',
+                      background: 'transparent', color: '#C0392B',
+                      border: '1.5px solid #C0392B', borderRadius: 10,
+                      fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      cursor: 'pointer', fontFamily: "'Figtree', sans-serif",
+                    }}
+                  >
+                    Request account deletion
+                  </button>
+                </div>
+              </div>
+            )}
           </main>
         </div>
       </div>
@@ -555,16 +1117,16 @@ export default function Profile() {
 
             <form onSubmit={saveAddress} style={{ display: 'grid', gap: 16 }}>
               <Field label="Label" value={addrForm.label || ''} onChange={e => setAddrForm(f => ({ ...f, label: e.target.value }))} placeholder="Home, Work, Mom's place…" />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="p-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="Recipient Name" value={addrForm.recipient_name || ''} onChange={e => setAddrForm(f => ({ ...f, recipient_name: e.target.value }))} required />
                 <Field label="Phone" type="tel" value={addrForm.phone || ''} onChange={e => setAddrForm(f => ({ ...f, phone: e.target.value }))} />
               </div>
               <Field label="Street Address" value={addrForm.street || ''} onChange={e => setAddrForm(f => ({ ...f, street: e.target.value }))} required />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="p-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="City" value={addrForm.city || ''} onChange={e => setAddrForm(f => ({ ...f, city: e.target.value }))} required />
                 <Field label="State / Province" value={addrForm.state || ''} onChange={e => setAddrForm(f => ({ ...f, state: e.target.value }))} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="p-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="ZIP / Postal Code" value={addrForm.zip || ''} onChange={e => setAddrForm(f => ({ ...f, zip: e.target.value }))} />
                 <Field label="Country" value={addrForm.country || ''} onChange={e => setAddrForm(f => ({ ...f, country: e.target.value }))} required />
               </div>

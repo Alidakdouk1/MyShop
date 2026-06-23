@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img" aria-label="Pick&amp;Go LB">
+  <title>Pick&amp;Go LB — Pick Smart. Go Further.</title>
+  <!--
+    Light-mode variant. "Pick" switches to Midnight Navy so the wordmark stays
+    legible on white/light surfaces; "&Go" stays in signal-lime; "LB" stays in
+    teal. Same monogram gradient — it's vibrant enough to work on light too.
+  -->
+  <defs>
+    <linearGradient id="pg-grad-light" x1="0.18" y1="0" x2="0.62" y2="1">
+      <stop offset="0%"   stop-color="#00D1C1"/>
+      <stop offset="55%"  stop-color="#3DD9A1"/>
+      <stop offset="100%" stop-color="#A3FF12"/>
+    </linearGradient>
+    <style>
+      .wordmark { font-family: 'Poppins','Inter',system-ui,sans-serif; font-weight: 800; letter-spacing: -0.02em; }
+      .tagline  { font-family: 'Poppins','Inter',system-ui,sans-serif; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+    </style>
+  </defs>
+  <g transform="translate(8 0)">
+    <path fill="url(#pg-grad-light)" fill-rule="evenodd" d="M 32 16 L 122 16 L 178 64 L 122 112 L 88 112 L 88 92 L 114 92 L 144 64 L 114 36 L 64 36 L 64 112 L 88 112 L 88 132 L 64 132 L 64 184 L 32 184 Z M 88 56 L 88 92 L 116 92 L 132 76 L 132 72 L 116 56 Z"/>
+    <path fill="#A3FF12" d="M 110 134 L 156 134 L 138 158 L 152 158 L 110 192 L 128 162 L 110 162 Z"/>
+  </g>
+  <text class="wordmark" x="208" y="118" font-size="84" fill="#0F172A">Pick<tspan fill="#15B8A6">&amp;Go</tspan><tspan fill="#0F172A">LB</tspan></text>
+  <text class="tagline" x="208" y="156" font-size="14" fill="#64748B">Pick Smart. <tspan fill="#15B8A6">Go Further.</tspan></text>
+</svg>

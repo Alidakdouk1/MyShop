@@ -13,6 +13,7 @@ export const uploadProductImage = (id, formData) =>
 export const getProductReviews = (id)          => api.get(`/products/${id}/reviews`)
 export const getReviewability  = (id)          => api.get(`/products/${id}/reviewability`)
 export const notifyBackInStock = (id, email)   => api.post(`/products/${id}/notify-me`, { email })
+export const notifyBackInStockPush = (id, sub) => api.post(`/products/${id}/notify-me/push`, sub)
 export const createReview      = (data)        => api.post('/reviews', data)
 export const deleteReview      = (id)          => api.delete(`/reviews/${id}`)
 export const uploadReviewPhoto = (id, formData) =>

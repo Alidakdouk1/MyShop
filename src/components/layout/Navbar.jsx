@@ -11,8 +11,12 @@ import { getHomepageSettings } from '../../api/adminApi'
 import { resolveImg } from '../../lib/img'
 import SearchBar from './SearchBar'
 import MobileSearchOverlay from './MobileSearchOverlay'
+import ImageSearchModal from '../search/ImageSearchModal'
 import CurrencyPicker from './CurrencyPicker'
+import LanguagePicker from './LanguagePicker'
+import Logo from '../brand/Logo'
 import { useCurrency } from '../../context/CurrencyContext'
+import { useI18n } from '../../i18n/I18nContext'
 import FreeShippingNudge from '../cart/FreeShippingNudge'
 import CartRecommendations from '../cart/CartRecommendations'
 
@@ -143,15 +147,17 @@ function AnnouncementBar() {
 }
 
 const NAV_LINKS = [
-  { label: 'Shop',        to: '/shop' },
-  { label: 'New Arrivals',to: '/shop?sort=newest' },
-  { label: 'Sale',        to: '/shop?on_sale=1' },
+  { key: 'nav.shop',         to: '/shop' },
+  { key: 'nav.new_arrivals', to: '/shop?sort=newest' },
+  { key: 'nav.sale',         to: '/shop?on_sale=1' },
+  { key: 'nav.marketplace',  to: '/marketplace', label: 'Marketplace' },
 ]
 
 export default function Navbar({ headerRef, hidden = false }) {
   const dispatch    = useDispatch()
   const location    = useLocation()
   const { logout }  = useAuth()
+  const { t }       = useI18n()
   const user        = useSelector(selectUser)
   const cartCount   = useSelector(selectCartCount)
   const wishCount   = useSelector(selectWishlistItems).length
@@ -159,6 +165,7 @@ export default function Navbar({ headerRef, hidden = false }) {
   const [userMenuOpen, setUserMenu] = useState(false)
   const [scrolled, setScrolled]     = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [imageSearchOpen, setImageSearchOpen] = useState(false)
   const userMenuRef = useRef(null)
 
   useEffect(() => {
@@ -204,9 +211,20 @@ export default function Navbar({ headerRef, hidden = false }) {
               </svg>
             </button>
 
-            {/* Logo */}
-            <Link to="/" className="flex-shrink-0 mr-2 transition-transform duration-200 hover:scale-[1.04] active:scale-95">
-              <span className="hero-display text-2xl tracking-wider text-ink">MY<span className="text-accent">SHOP</span></span>
+            {/* Logo — full lockup on tablet+, icon-only on phones to save room.
+                Wrap each variant in its own visibility span; Logo's root div
+                uses inline display so Tailwind's `hidden` won't override it. */}
+            <Link
+              to="/"
+              aria-label="Pick&Go LB — Home"
+              className="shrink-0 mr-2 transition-transform duration-200 hover:scale-[1.04] active:scale-95"
+            >
+              <span className="hidden sm:inline-block">
+                <Logo variant="light" size={32} />
+              </span>
+              <span className="sm:hidden inline-block">
+                <Logo variant="light" size={32} showText={false} />
+              </span>
             </Link>
 
             {/* Nav links — desktop */}
@@ -217,7 +235,7 @@ export default function Navbar({ headerRef, hidden = false }) {
                   to={l.to}
                   className="px-3.5 py-2 text-sm font-semibold text-ink-secondary hover:text-ink rounded-lg hover:bg-surface-alt transition-all duration-150"
                 >
-                  {l.label}
+                  {l.label || t(l.key)}
                 </Link>
               ))}
             </nav>
@@ -239,6 +257,22 @@ export default function Navbar({ headerRef, hidden = false }) {
                 </svg>
               </button>
 
+              {/* Search by image — camera icon, always visible */}
+              <button
+                onClick={() => setImageSearchOpen(true)}
+                className="p-2.5 rounded-xl hover:bg-surface-alt text-ink transition-all duration-200 active:scale-90"
+                aria-label="Search by image"
+                title="Search by image"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </button>
+
+              {/* Language */}
+              <LanguagePicker />
+
               {/* Currency */}
               <CurrencyPicker />
 
@@ -256,8 +290,9 @@ export default function Navbar({ headerRef, hidden = false }) {
               {/* Cart */}
               <button
                 onClick={() => dispatch(toggleCart())}
+                data-cart-icon
                 className="relative p-2.5 rounded-xl hover:bg-surface-alt transition-all duration-200 hover:-translate-y-0.5 active:scale-90"
-                aria-label="Open cart"
+                aria-label={t('nav.cart')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -301,20 +336,20 @@ export default function Navbar({ headerRef, hidden = false }) {
                               <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-accent shrink-0">
                                 <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
-                              Admin Panel
+                              {t('auth.admin_panel')}
                             </span>
                           </MenuLink>
                         )}
-                        <MenuLink to="/account/orders" onClick={() => setUserMenu(false)}>My Orders</MenuLink>
-                        <MenuLink to="/account/wishlist" onClick={() => setUserMenu(false)}>Wishlist</MenuLink>
-                        <MenuLink to="/account/profile" onClick={() => setUserMenu(false)}>Profile Settings</MenuLink>
+                        <MenuLink to="/account/orders" onClick={() => setUserMenu(false)}>{t('nav.orders')}</MenuLink>
+                        <MenuLink to="/account/wishlist" onClick={() => setUserMenu(false)}>{t('nav.wishlist')}</MenuLink>
+                        <MenuLink to="/account/profile" onClick={() => setUserMenu(false)}>{t('nav.profile')}</MenuLink>
                       </div>
                       <div className="border-t border-border py-1">
                         <button
                           onClick={() => { setUserMenu(false); logout() }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-accent font-medium hover:bg-accent-light transition-colors"
+                          className="w-full text-start px-4 py-2.5 text-sm text-accent font-medium hover:bg-accent-light transition-colors"
                         >
-                          Sign Out
+                          {t('auth.sign_out')}
                         </button>
                       </div>
                     </div>
@@ -323,10 +358,10 @@ export default function Navbar({ headerRef, hidden = false }) {
               ) : (
                 <div className="flex items-center gap-2">
                   <Link to="/login" className="px-3.5 py-2 text-sm font-semibold text-ink hover:bg-surface-alt rounded-xl transition-colors">
-                    Login
+                    {t('auth.login')}
                   </Link>
                   <Link to="/register" className="px-4 py-2 bg-ink text-white text-sm font-semibold rounded-xl hover:bg-ink/80 transition-colors hidden sm:block">
-                    Sign Up
+                    {t('auth.sign_up')}
                   </Link>
                 </div>
               )}
@@ -341,21 +376,21 @@ export default function Navbar({ headerRef, hidden = false }) {
               {NAV_LINKS.map(l => (
                 <Link key={l.to} to={l.to}
                   className="px-4 py-3 text-sm font-semibold text-ink-secondary hover:text-ink hover:bg-surface-alt rounded-xl transition-colors">
-                  {l.label}
+                  {l.label || t(l.key)}
                 </Link>
               ))}
               <div className="h-px bg-border my-2" />
               {user ? (
                 <>
                   {user.role === 'admin' && (
-                    <Link to="/admin" className="px-4 py-3 text-sm font-semibold text-accent hover:bg-surface-alt rounded-xl">Admin Panel</Link>
+                    <Link to="/admin" className="px-4 py-3 text-sm font-semibold text-accent hover:bg-surface-alt rounded-xl">{t('auth.admin_panel')}</Link>
                   )}
-                  <Link to="/account/orders" className="px-4 py-3 text-sm font-semibold text-ink-secondary hover:bg-surface-alt rounded-xl">Orders</Link>
-                  <Link to="/account/wishlist" className="px-4 py-3 text-sm font-semibold text-ink-secondary hover:bg-surface-alt rounded-xl">Wishlist</Link>
-                  <button onClick={logout} className="px-4 py-3 text-sm font-semibold text-accent text-left hover:bg-accent-light rounded-xl">Sign Out</button>
+                  <Link to="/account/orders" className="px-4 py-3 text-sm font-semibold text-ink-secondary hover:bg-surface-alt rounded-xl">{t('nav.orders')}</Link>
+                  <Link to="/account/wishlist" className="px-4 py-3 text-sm font-semibold text-ink-secondary hover:bg-surface-alt rounded-xl">{t('nav.wishlist')}</Link>
+                  <button onClick={logout} className="px-4 py-3 text-sm font-semibold text-accent text-start hover:bg-accent-light rounded-xl">{t('auth.sign_out')}</button>
                 </>
               ) : (
-                <Link to="/login" className="px-4 py-3 text-sm font-semibold text-ink hover:bg-surface-alt rounded-xl">Login / Sign Up</Link>
+                <Link to="/login" className="px-4 py-3 text-sm font-semibold text-ink hover:bg-surface-alt rounded-xl">{t('auth.login_register')}</Link>
               )}
             </nav>
           </div>
@@ -367,6 +402,9 @@ export default function Navbar({ headerRef, hidden = false }) {
 
       {/* Mobile full-screen search */}
       <MobileSearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      {/* Search by image — modal with file picker + Vision results */}
+      <ImageSearchModal open={imageSearchOpen} onClose={() => setImageSearchOpen(false)} />
     </>
   )
 }

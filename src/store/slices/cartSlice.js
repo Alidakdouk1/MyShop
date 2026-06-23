@@ -27,25 +27,44 @@ export const clearCartThunk = createAsyncThunk('cart/clear', async () => {
 
 const cartSlice = createSlice({
   name: 'cart',
-  initialState: { items: [], loading: false, error: null },
+  initialState: {
+    items: [], loading: false, error: null,
+    // Server-evaluated automatic promos (BOGO + free gift) — shape from
+    // PromotionModel::evaluate(): { savings_total, adjustments[], free_items[] }
+    promotions: { savings_total: 0, adjustments: [], free_items: [] },
+  },
   reducers: {
     setCartItems: (state, action) => { state.items = action.payload },
   },
   extraReducers: builder => {
     builder
       .addCase(fetchCart.pending,             s => { s.loading = true })
-      .addCase(fetchCart.fulfilled,           (s, a) => { s.loading = false; s.items = a.payload?.items || [] })
+      .addCase(fetchCart.fulfilled,           (s, a) => {
+        s.loading = false
+        s.items = a.payload?.items || []
+        if (a.payload?.promotions) s.promotions = a.payload.promotions
+      })
       .addCase(fetchCart.rejected,            s => { s.loading = false })
-      .addCase(addToCartThunk.fulfilled,      (s, a) => { s.items = a.payload?.items || s.items })
-      .addCase(updateCartItemThunk.fulfilled, (s, a) => { s.items = a.payload?.items || s.items })
+      .addCase(addToCartThunk.fulfilled,      (s, a) => {
+        s.items = a.payload?.items || s.items
+        if (a.payload?.promotions) s.promotions = a.payload.promotions
+      })
+      .addCase(updateCartItemThunk.fulfilled, (s, a) => {
+        s.items = a.payload?.items || s.items
+        if (a.payload?.promotions) s.promotions = a.payload.promotions
+      })
       .addCase(removeCartItemThunk.fulfilled, (s, a) => { s.items = s.items.filter(i => i.id !== a.payload) })
-      .addCase(clearCartThunk.fulfilled,      s => { s.items = [] })
+      .addCase(clearCartThunk.fulfilled,      s => {
+        s.items = []
+        s.promotions = { savings_total: 0, adjustments: [], free_items: [] }
+      })
   },
 })
 
 export const { setCartItems } = cartSlice.actions
-export const selectCartItems   = s => s.cart.items
-export const selectCartCount   = s => s.cart.items.reduce((n, i) => n + i.quantity, 0)
-export const selectCartTotal   = s => s.cart.items.reduce((n, i) => n + (parseFloat(i.price) * i.quantity), 0)
-export const selectCartLoading = s => s.cart.loading
+export const selectCartItems      = s => s.cart.items
+export const selectCartCount      = s => s.cart.items.reduce((n, i) => n + i.quantity, 0)
+export const selectCartTotal      = s => s.cart.items.reduce((n, i) => n + (parseFloat(i.price) * i.quantity), 0)
+export const selectCartLoading    = s => s.cart.loading
+export const selectCartPromotions = s => s.cart.promotions
 export default cartSlice.reducer

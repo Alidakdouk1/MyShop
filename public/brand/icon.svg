@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Pick&amp;Go LB">
+  <title>Pick&amp;Go LB</title>
+  <defs>
+    <!--
+      Brand gradient — teal at the top transitioning into signal lime at the
+      bottom-right, mirroring the reference logo. The gradient axis is offset
+      slightly to the right so the lime weight sits where the forward-motion
+      stroke is, matching the printed brand sheet.
+    -->
+    <linearGradient id="pg-grad" x1="0.18" y1="0" x2="0.62" y2="1">
+      <stop offset="0%"   stop-color="#00D1C1"/>
+      <stop offset="55%"  stop-color="#54E89A"/>
+      <stop offset="100%" stop-color="#A3FF12"/>
+    </linearGradient>
+  </defs>
+
+  <!--
+    PG monogram. The single composite path forms:
+      * A bold P bowl with a chevron point on the right (forward motion)
+      * The P stem (vertical bar on the left)
+      * An angled tail cutting forward-and-down (the "Go" gesture)
+      * Negative-space "G" cut inside the bowl via the fill-rule="evenodd" subpath
+    Tuned for visual balance at the favicon size (16-32px) up through hero
+    display sizes (320px+).
+  -->
+  <path fill="url(#pg-grad)" fill-rule="evenodd" d="
+    M 32 16
+    L 122 16
+    L 178 64
+    L 122 112
+    L 88 112
+    L 88 92
+    L 114 92
+    L 144 64
+    L 114 36
+    L 64 36
+    L 64 112
+    L 88 112
+    L 88 132
+    L 64 132
+    L 64 184
+    L 32 184
+    Z
+    M 88 56
+    L 88 92
+    L 116 92
+    L 132 76
+    L 132 72
+    L 116 56
+    Z
+  "/>
+
+  <!--
+    Lime forward-motion chevron — sits below-right of the bowl as a visual
+    'go' indicator, echoing the brand attribute 'speed'.
+  -->
+  <path fill="#A3FF12" d="
+    M 110 134
+    L 156 134
+    L 138 158
+    L 152 158
+    L 110 192
+    L 128 162
+    L 110 162
+    Z
+  "/>
+</svg>

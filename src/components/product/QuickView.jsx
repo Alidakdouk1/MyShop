@@ -9,6 +9,9 @@ import { useToast } from '../../hooks/useToast'
 import Modal from '../ui/Modal'
 import StarRating from '../common/StarRating'
 import Spinner from '../ui/Spinner'
+import { flyToCart } from '../../lib/flyToCart'
+import { heartBurst } from '../../lib/heartBurst'
+import { useAddedToCart } from '../../context/AddedToCartContext'
 
 const imgUrl = (src) => {
   if (!src) return `https://placehold.co/600x600/F2F0EB/9C9894?text=No+Image`
@@ -20,11 +23,13 @@ const imgUrl = (src) => {
 export default function QuickView({ slug, open, onClose }) {
   const dispatch = useDispatch()
   const toast    = useToast()
+  const addedToCart = useAddedToCart()
   const user     = useSelector(selectUser)
   const [product, setProduct] = useState(null)
   const [qty, setQty]         = useState(1)
   const [adding, setAdding]   = useState(false)
   const [variant, setVariant] = useState(null)
+  const [imgIdx, setImgIdx]   = useState(0)
 
   const isWished = useSelector(selectIsWishlisted(product?.id))
   const wItemId  = useSelector(selectWishlistItemId(product?.id))
@@ -41,6 +46,7 @@ export default function QuickView({ slug, open, onClose }) {
         setProduct(p)
         setVariant(p.variants?.length ? p.variants[0] : null)
         setQty(1)
+        setImgIdx(0)
       })
       .catch(() => { if (!cancelled) toast.error('Could not load product') })
     return () => { cancelled = true }
@@ -54,23 +60,36 @@ export default function QuickView({ slug, open, onClose }) {
   const price       = (salePrice ?? basePrice) + modifier
   const discount    = salePrice && salePrice < basePrice ? Math.round((1 - salePrice / basePrice) * 100) : null
   const images      = (product?.images || []).map(i => i.image_url || i).filter(Boolean)
-  const stockQty    = hasVariants ? Number(variant?.stock_qty || 0) : Number(product?.stock_qty || 0)
+  // Respect stock reservations — available_stock = raw - other carts' active holds.
+  // Falls back to raw stock_qty so older payloads keep working.
+  const stockQty    = hasVariants
+    ? Number(variant?.available_stock ?? variant?.stock_qty ?? 0)
+    : Number(product?.available_stock ?? product?.stock_qty ?? 0)
 
   const addToCart = async () => {
     if (!user) { toast.info('Please login to add to cart'); return }
     if (hasVariants && !variant) { toast.info('Please select an option'); return }
+    // Snapshot the modal's currently-visible image BEFORE we close so we have
+    // a valid source rect for the fly-to-cart animation.
+    const sourceImg = document.querySelector('[data-quickview-image]')
     setAdding(true)
     const payload = { product_id: product.id, quantity: qty }
     if (variant) payload.variant_id = variant.id
     const r = await dispatch(addToCartThunk(payload))
     setAdding(false)
-    if (!r.error) { toast.success('Added to cart!'); onClose?.() }
-    else toast.error(r.payload || 'Failed to add')
+    if (!r.error) {
+      flyToCart(sourceImg)
+      addedToCart.show({ product, qty, image: imgUrl(images[imgIdx] || images[0]) })
+      onClose?.()
+    } else toast.error(r.payload || 'Failed to add')
   }
 
-  const toggleWish = async () => {
+  const toggleWish = async (e) => {
     if (!user) { toast.info('Please login to save items'); return }
+    const heartBtn  = e?.currentTarget
+    const wasWished = isWished
     await dispatch(toggleWishlistThunk({ productId: product.id, wishlistItemId: isWished ? wItemId : null }))
+    if (!wasWished && heartBtn) heartBurst(heartBtn)
   }
 
   return (
@@ -81,13 +100,73 @@ export default function QuickView({ slug, open, onClose }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {/* Image */}
-          <div className="relative rounded-xl overflow-hidden bg-surface-alt aspect-square">
-            <img src={imgUrl(images[0])} alt={product.name} className="w-full h-full object-cover" />
-            {discount && (
-              <span className="absolute top-3 left-3 bg-accent text-white text-xs font-bold px-2 py-1 rounded-lg">
-                −{discount}%
-              </span>
+          {/* Image carousel — arrows + dots when >1 image */}
+          <div>
+            <div className="relative rounded-xl overflow-hidden bg-surface-alt aspect-square">
+              <img
+                src={imgUrl(images[imgIdx] || images[0])}
+                alt={product.name}
+                data-quickview-image
+                className="w-full h-full object-cover transition-opacity duration-200"
+              />
+              {discount && (
+                <span className="absolute top-3 left-3 bg-accent text-white text-xs font-bold px-2 py-1 rounded-lg">
+                  −{discount}%
+                </span>
+              )}
+              {images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setImgIdx(i => (i - 1 + images.length) % images.length)}
+                    aria-label="Previous image"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/85 backdrop-blur-sm flex items-center justify-center text-ink shadow-md hover:bg-white transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24" data-rtl-flip>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImgIdx(i => (i + 1) % images.length)}
+                    aria-label="Next image"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/85 backdrop-blur-sm flex items-center justify-center text-ink shadow-md hover:bg-white transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24" data-rtl-flip>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    {images.map((_, i) => (
+                      <span
+                        key={i}
+                        className="block w-1.5 h-1.5 rounded-full transition-all"
+                        style={{
+                          background: i === imgIdx ? '#0F172A' : 'rgba(15,23,42,0.30)',
+                          width: i === imgIdx ? 16 : 6,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {images.length > 1 && (
+              <div className="hidden sm:flex gap-2 mt-2">
+                {images.slice(0, 5).map((src, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setImgIdx(i)}
+                    aria-label={`View image ${i + 1}`}
+                    className={`w-12 h-12 rounded-lg overflow-hidden bg-surface-alt border-2 transition-colors ${
+                      i === imgIdx ? 'border-ink' : 'border-transparent hover:border-ink/30'
+                    }`}
+                  >
+                    <img src={imgUrl(src)} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 

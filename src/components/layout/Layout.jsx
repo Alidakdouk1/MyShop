@@ -8,7 +8,9 @@ import ChatWidget from '../chat/ChatWidget'
 import ScrollToTop from '../common/ScrollToTop'
 import LiveActivityTicker from '../common/LiveActivityTicker'
 import NewsletterPopup from '../common/NewsletterPopup'
+import SalesBanner from '../common/SalesBanner'
 import CompareBar from '../compare/CompareBar'
+import PwaInstall from '../common/PwaInstall'
 
 // Shared header state so sticky sub-bars (e.g. the Shop category bar) can
 // follow the header as it hides/shows on scroll.
@@ -51,6 +53,7 @@ export default function Layout({ children }) {
   return (
     <HeaderUIContext.Provider value={{ hidden, headerHeight }}>
       <div className="min-h-dvh flex flex-col bg-bg">
+        <SalesBanner />
         <Navbar headerRef={headerRef} hidden={hidden} />
         <main className="flex-1">{children}</main>
         <Footer />
@@ -63,6 +66,7 @@ export default function Layout({ children }) {
         <LiveActivityTicker />
         <NewsletterPopup />
         <CompareBar />
+        <PwaInstall />
         <ToastContainer />
       </div>
     </HeaderUIContext.Provider>

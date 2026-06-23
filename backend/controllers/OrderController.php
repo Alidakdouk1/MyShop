@@ -41,6 +41,14 @@ class OrderController
             $couponId = (int) $coupon['id'];
         }
 
+        // Cart-side automatic promotions (BOGO + free gift). Engine runs on the
+        // same cart rows we'll record on the order, so totals match what the
+        // shopper saw on the cart page. Promo savings stack onto coupon discount.
+        $promoEval     = (new PromotionModel())->evaluate($items);
+        $promoSavings  = (float) $promoEval['savings_total'];
+        $promoGifts    = $promoEval['free_items'];
+        $discount     += $promoSavings;
+
         $shippingFee = $subtotal >= $FREE_SHIPPING_THRESHOLD ? 0.00 : $FLAT_SHIPPING_FEE;
         $tax         = round(max(0, $subtotal - $discount) * $TAX_RATE, 2);
         $total       = round($subtotal - $discount + $shippingFee + $tax, 2);
@@ -111,8 +119,28 @@ class OrderController
                 }
             }
 
+            // Auto-add free-gift line items at $0. Skip silently if a gift's
+            // stock vanished between cart fetch and checkout — we already
+            // recorded a discount of 0 for gifts, so the order math holds.
+            foreach ($promoGifts as $g) {
+                $gid = (int) $g['product_id'];
+                $gp  = $products->findById($gid);
+                if (!$gp || (int) ($gp['stock_qty'] ?? 0) <= 0) continue;
+                if (!$products->decrementStock($gid, 1)) continue;
+                $this->orders->addItem($orderId, [
+                    'product_id'            => $gid,
+                    'variant_id'            => null,
+                    'quantity'              => 1,
+                    'unit_price'            => 0.0,
+                    'product_name_snapshot' => '🎁 ' . ($gp['name'] ?? $g['name']) . ' (free gift)',
+                    'sku_snapshot'          => $gp['sku'] ?? null,
+                ], []);
+            }
+
             if ($couponId) $this->coupons->incrementUsage($couponId);
             $this->carts->clear((int) $cart['id']);
+            // The real stock was already decremented above, so drop the holds.
+            (new StockReservationModel())->releaseCart((int) $cart['id']);
 
             $this->orders->commit();
         } catch (\Throwable $e) {
@@ -120,10 +148,21 @@ class OrderController
             error($e->getMessage(), 409);
         }
 
+        // If this order used a recovery coupon, close the loop on its row so the
+        // admin sees the win in the recovery stats.
+        AbandonedCartController::maybeMarkRecovered($orderId, $couponId, $total);
+
         // Confirmation side-effects run only after the order is safely committed.
         $order = $this->orders->withItems($orderId);
         $user  = (new UserModel())->findById($userId);
         MailHelper::orderConfirmation($user['email'], $user['name'], $order, $order['items']);
+
+        // Also notify the shop owner so they can act on it. The address is the
+        // mail-from address by default; admin can override with ADMIN_NOTIFY_EMAIL.
+        $adminEmail = env('ADMIN_NOTIFY_EMAIL', env('MAIL_FROM_ADDRESS', ''));
+        if ($adminEmail) {
+            MailHelper::adminNewOrderAlert($adminEmail, $order, $order['items'], $user['name']);
+        }
 
         (new NotificationModel())->create(
             $userId, 'order_update', "Order #{$orderId} Confirmed",

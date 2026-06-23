@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { selectUser } from '../../store/slices/authSlice'
 import Input from '../../components/ui/Input'
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton'
+import Logo from '../../components/brand/Logo'
 
 /* ── decorative left panel ─────────────────────────────────────────── */
 function LeftPanel() {
@@ -31,9 +32,7 @@ function LeftPanel() {
 
       {/* top-left mark */}
       <div style={{ padding: '2.5rem 2.5rem 0', position: 'relative', zIndex: 1 }}>
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.25rem', letterSpacing: '0.18em', color: '#FAFAF8' }}>
-          MY<span style={{ color: '#C0392B' }}>SHOP</span>
-        </span>
+        <Logo variant="dark" size={28} />
       </div>
 
       {/* centre type composition */}
@@ -119,8 +118,8 @@ export default function Register() {
 
         {/* mobile-only logo */}
         <div className="lg:hidden mb-8 text-center">
-          <Link to="/" style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', letterSpacing: '0.1em', color: '#0F0F0F', textDecoration: 'none' }}>
-            MY<span style={{ color: '#C0392B' }}>SHOP</span>
+          <Link to="/" aria-label="Pick&Go LB" style={{ textDecoration: 'none' }}>
+            <Logo variant="light" size={44} />
           </Link>
         </div>
 

@@ -167,18 +167,22 @@ class OrderModel extends BaseModel
 
     public function all(int $limit, int $offset, string $status = ''): array
     {
+        // Joined-in customer VIP level + the body of their most-recently-updated
+        // pinned note (if any) so the admin orders list can flag context inline.
+        $select =
+            "SELECT o.*, u.name AS customer_name, u.email AS customer_email, u.vip_level,
+                    (SELECT body FROM customer_notes
+                     WHERE user_id = u.id AND pinned = 1
+                     ORDER BY updated_at DESC LIMIT 1) AS pinned_note
+             FROM orders o JOIN users u ON u.id = o.user_id";
         if ($status) {
             return $this->query(
-                "SELECT o.*, u.name AS customer_name, u.email AS customer_email
-                 FROM orders o JOIN users u ON u.id = o.user_id
-                 WHERE o.status = ? ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+                "{$select} WHERE o.status = ? ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
                 [$status, $limit, $offset]
             )->fetchAll();
         }
         return $this->query(
-            "SELECT o.*, u.name AS customer_name, u.email AS customer_email
-             FROM orders o JOIN users u ON u.id = o.user_id
-             ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
+            "{$select} ORDER BY o.created_at DESC LIMIT ? OFFSET ?",
             [$limit, $offset]
         )->fetchAll();
     }

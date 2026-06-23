@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pick&Go LB — Brand Preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy:  #0F172A;
+      --teal:  #00D1C1;
+      --lime:  #A3FF12;
+      --slate: #1E293B;
+      --slate2:#334155;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: 'Poppins', system-ui, sans-serif; background: var(--navy); color: #fff; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+    .grid { display: grid; gap: 24px; }
+    .panel {
+      border-radius: 18px;
+      padding: 32px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--slate);
+    }
+    .panel--light { background: #FFFFFF; color: var(--navy); border-color: #E2E8F0; }
+    .label {
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #94A3B8;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+    .panel--light .label { color: #64748B; }
+    .swatches { display: flex; gap: 12px; flex-wrap: wrap; }
+    .sw { width: 88px; }
+    .sw-chip { width: 88px; height: 88px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); }
+    .sw-name { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; margin-top: 8px; }
+    .sw-hex  { font-size: 11px; color: #94A3B8; margin-top: 2px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .row { display: flex; align-items: center; gap: 36px; flex-wrap: wrap; }
+    .center { display: flex; justify-content: center; align-items: center; }
+    h1 { font-size: 14px; letter-spacing: 0.3em; text-transform: uppercase; margin: 0 0 32px; color: #94A3B8; font-weight: 700; }
+    .reference { padding: 12px; background: #0F172A; border-radius: 14px; text-align: center; color: #94A3B8; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Pick&Go LB — Brand Preview</h1>
+
+    <div class="grid" style="grid-template-columns: 1fr; gap: 24px;">
+      <!-- Hero: full logo on dark -->
+      <div class="panel" style="text-align: center; padding: 60px 32px;">
+        <p class="label">Full Logo · Dark Surface</p>
+        <img src="./logo-dark.svg" alt="Pick&Go LB" style="max-width: 520px; width: 100%;" />
+      </div>
+
+      <!-- Full logo on light -->
+      <div class="panel panel--light" style="text-align: center; padding: 60px 32px;">
+        <p class="label">Full Logo · Light Surface</p>
+        <img src="./logo-light.svg" alt="Pick&Go LB" style="max-width: 520px; width: 100%;" />
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 24px;">
+      <!-- Mark only — icon sizes -->
+      <div class="panel center" style="flex-direction: column;">
+        <p class="label">Mark · 128 px</p>
+        <img src="./icon.svg" width="128" height="128" alt="" />
+      </div>
+      <div class="panel center" style="flex-direction: column;">
+        <p class="label">Mark · 64 px</p>
+        <img src="./icon.svg" width="64" height="64" alt="" />
+      </div>
+      <div class="panel center" style="flex-direction: column;">
+        <p class="label">Favicon · 32 px</p>
+        <img src="./favicon.svg" width="32" height="32" alt="" />
+        <img src="./favicon.svg" width="16" height="16" alt="" style="margin-top:10px"/>
+      </div>
+    </div>
+
+    <!-- Brand color system -->
+    <div class="panel" style="margin-top: 24px;">
+      <p class="label">Color System</p>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background: #0F172A; border-color: rgba(255,255,255,0.15)"></div><div class="sw-name">Midnight</div><div class="sw-hex">#0F172A</div></div>
+        <div class="sw"><div class="sw-chip" style="background: #00D1C1"></div>            <div class="sw-name">Electric Teal</div><div class="sw-hex">#00D1C1</div></div>
+        <div class="sw"><div class="sw-chip" style="background: #A3FF12"></div>            <div class="sw-name">Signal Lime</div><div class="sw-hex">#A3FF12</div></div>
+        <div class="sw"><div class="sw-chip" style="background: #FFFFFF"></div>            <div class="sw-name">White</div><div class="sw-hex">#FFFFFF</div></div>
+      </div>
+    </div>
+
+    <!-- Mock applications -->
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-top: 24px;">
+      <!-- App icon mock -->
+      <div class="panel center" style="flex-direction: column;">
+        <p class="label">App Icon Tile</p>
+        <div style="width: 180px; height: 180px; border-radius: 36px; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); display:flex; align-items:center; justify-content:center; box-shadow: 0 24px 64px rgba(0,0,0,0.4);">
+          <img src="./icon.svg" width="120" height="120" alt="" />
+        </div>
+      </div>
+
+      <!-- Navbar mock -->
+      <div class="panel" style="padding: 0; overflow: hidden;">
+        <p class="label" style="padding: 20px 24px 0">Navbar Lockup</p>
+        <div style="padding: 18px 24px; display:flex; align-items:center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 12px;">
+          <img src="./logo-dark.svg" alt="Pick&Go LB" style="height: 36px;"/>
+          <div style="display:flex; gap: 18px; font-size: 13px; color: #94A3B8;">
+            <span>Shop</span><span>About</span><span>Contact</span>
+          </div>
+        </div>
+        <div style="padding: 18px 24px; display:flex; align-items:center; justify-content: space-between; border-top: 1px solid #E2E8F0; background: #FFFFFF; color: var(--navy);">
+          <img src="./logo-light.svg" alt="Pick&Go LB" style="height: 36px;"/>
+          <div style="display:flex; gap: 18px; font-size: 13px; color: #64748B;">
+            <span>Shop</span><span>About</span><span>Contact</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p style="text-align: center; margin-top: 40px; font-size: 11px; color: #64748B; letter-spacing: 0.18em; text-transform: uppercase;">
+      Preview &middot; <span style="color:#A3FF12">Pick Smart.</span> <span style="color:#00D1C1">Go Further.</span>
+    </p>
+  </div>
+</body>
+</html>

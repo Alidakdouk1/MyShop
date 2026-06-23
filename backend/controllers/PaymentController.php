@@ -85,6 +85,10 @@ class PaymentController
         'whish_name'     => '',
         'currency_note'  => 'USD',
         'instructions'   => "Open the Whish Money app → Send Money → enter the phone number above → enter the amount → in the note field write your order reference (e.g. MS-7), then tap Send. Forward the confirmation screenshot to our WhatsApp so we can match it to your order faster.",
+        // Optional deep link the frontend opens after Place Order to launch the
+        // Whish app directly. Defaults to the whish:// custom scheme; admin can
+        // paste a "Whish For Business" link if Whish provides one.
+        'whish_deeplink' => 'whish://',
     ];
 
     private function whishSettings(): array
@@ -98,11 +102,12 @@ class PaymentController
     private function saveWhish(array $s): void
     {
         $clean = [
-            'enabled'       => empty($s['enabled']) ? 0 : 1,
-            'whish_phone'   => trim((string) ($s['whish_phone']   ?? '')),
-            'whish_name'    => trim(sanitize((string) ($s['whish_name']    ?? ''))),
-            'currency_note' => trim(sanitize((string) ($s['currency_note'] ?? 'USD'))),
-            'instructions'  => trim(sanitize((string) ($s['instructions']  ?? ''))),
+            'enabled'        => empty($s['enabled']) ? 0 : 1,
+            'whish_phone'    => trim((string) ($s['whish_phone']    ?? '')),
+            'whish_name'     => trim(sanitize((string) ($s['whish_name']     ?? ''))),
+            'currency_note'  => trim(sanitize((string) ($s['currency_note']  ?? 'USD'))),
+            'instructions'   => trim(sanitize((string) ($s['instructions']   ?? ''))),
+            'whish_deeplink' => trim((string) ($s['whish_deeplink'] ?? 'whish://')),
         ];
         $stmt = getDB()->prepare(
             "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)

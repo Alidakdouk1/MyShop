@@ -2,9 +2,15 @@
 // <meta> and <link> anywhere hoists them into <head>. JSON-LD is emitted as a
 // script tag (valid anywhere in the document for crawlers).
 
-const SITE = 'MyShop'
+const SITE = 'Pick&Go LB'
 const DEFAULT_DESC =
-  'Shop curated fashion, electronics, beauty and more at MyShop — premium products, fast shipping and easy returns.'
+  'Pick&Go LB — premium commerce in Lebanon. Pick smart. Go further. Curated products, fast delivery, easy returns.'
+
+// Escape `<` so a `</script>` inside any JSON string can't terminate the tag
+// and break out into executable HTML. JSON.stringify does NOT do this for us.
+function safeJson(value) {
+  return JSON.stringify(value).replace(/</g, '\\u003c')
+}
 
 export default function Seo({
   title,
@@ -34,7 +40,7 @@ export default function Seo({
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: safeJson(jsonLd) }}
         />
       )}
     </>

@@ -90,7 +90,8 @@ export default function AdminLowStock() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="text-left text-[10px] font-bold uppercase tracking-wider text-ink-tertiary border-b border-black/5">
                 <th className="px-5 py-3">Product</th>
@@ -144,6 +145,7 @@ export default function AdminLowStock() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

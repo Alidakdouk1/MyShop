@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { addToCartThunk } from '../../store/slices/cartSlice'
+import { flyToCart } from '../../lib/flyToCart'
+import { heartBurst } from '../../lib/heartBurst'
+import { useAddedToCart } from '../../context/AddedToCartContext'
 import { toggleWishlistThunk, selectIsWishlisted, selectWishlistItemId } from '../../store/slices/wishlistSlice'
 import { selectUser } from '../../store/slices/authSlice'
 import { useToast } from '../../hooks/useToast'
@@ -33,6 +36,7 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
   const imageRatio   = cardSettings.image_ratio    || '3/4'
   const dispatch  = useDispatch()
   const toast     = useToast()
+  const addedToCart = useAddedToCart()
   const { format } = useCurrency()
   const user      = useSelector(selectUser)
   const isWished  = useSelector(selectIsWishlisted(product.id))
@@ -74,17 +78,29 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
   const handleAddToCart = async (e) => {
     e.preventDefault()
     if (!user) { toast.info('Please login to add to cart'); return }
+    // Grab the card's own image as the animation source BEFORE the async hop,
+    // so we don't lose the click context if React re-renders.
+    const cardEl = e.currentTarget?.closest('[data-product-card]') || e.currentTarget
     setAdding(true)
     const result = await dispatch(addToCartThunk({ product_id: product.id, quantity: 1 }))
     setAdding(false)
-    if (!result.error) toast.success('Added to cart!')
-    else toast.error(result.payload || 'Failed to add')
+    if (!result.error) {
+      flyToCart(cardEl)
+      // The popover is the primary feedback now — skip the toast to avoid
+      // double-confirmation on the same action.
+      addedToCart.show({ product, qty: 1, image: imgSrc })
+    } else toast.error(result.payload || 'Failed to add')
   }
 
   const handleWishlist = async (e) => {
     e.preventDefault()
     if (!user) { toast.info('Please login to save items'); return }
+    // Capture the heart button + the "currently wishlisted" flag BEFORE the
+    // dispatch so we can fire the burst only on "add", not on "remove".
+    const heartBtn = e.currentTarget
+    const wasWished = isWished
     await dispatch(toggleWishlistThunk({ productId: product.id, wishlistItemId: isWished ? wItemId : null }))
+    if (!wasWished) heartBurst(heartBtn)
   }
 
   const handleCompare = (e) => {
@@ -99,6 +115,7 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
     <>
     <Link
       to={`/products/${product.slug}`}
+      data-product-card
       className="group product-card block active:scale-[0.96]"
       style={{ transition: 'transform 0.22s var(--ease-out-soft)' }}
       onMouseEnter={() => { if (product.preview_video) setPreviewActive(true) }}
@@ -193,13 +210,15 @@ export default function ProductCard({ product, cardShape = 'rounded', cardSettin
                 d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
             </svg>
           </button>
-          {/* Quick view — hover-revealed below the wishlist button */}
+          {/* Quick view — always visible on touch devices (no hover state),
+              hover-revealed on desktop where the design has room to breathe. */}
           <button
             onClick={(e) => { e.preventDefault(); setQuickOpen(true) }}
             aria-label="Quick view"
             className="absolute top-14 right-3 z-20 w-9 h-9 rounded-full flex items-center justify-center
               bg-white/70 backdrop-blur-md text-ink-tertiary shadow-md
-              opacity-0 group-hover:opacity-100 hover:text-ink hover:bg-white hover:scale-110
+              opacity-100 sm:opacity-0 sm:group-hover:opacity-100
+              hover:text-ink hover:bg-white hover:scale-110
               transition-all duration-300 ease-(--ease-out-back) active:scale-90"
           >
             <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">

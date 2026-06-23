@@ -1,21 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Figtree:ital,wght@0,300..900;1,300..900&family=Cormorant+Garamond:wght@400;600&display=swap');
+/* Pick&Go LB — Poppins primary, Inter fallback, Tajawal for the Arabic locale.
+   Bebas Neue + Cormorant kept around because a few legacy display headings
+   still reach for them; they'll be retired as those screens are refactored. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&family=Bebas+Neue&family=Cormorant+Garamond:wght@400;600&family=Tajawal:wght@300;400;500;700;900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #FAFAF8;
+  /* Light shopping UI stays — only the accent palette flips to Pick&Go's
+     teal + lime. Existing Tailwind utilities (bg-accent, text-gold, etc.)
+     keep working — they just point at the brand colors now.
+
+     Tone shift 2026-06: nudged a few values to lift the perceived freshness
+     without rebranding. Background is a hair more neutral (less yellow);
+     teal CTA is a touch more saturated; tertiary text picks up two notches
+     of contrast so secondary copy reads cleaner. */
+  --color-bg: #FAFAFC;
   --color-surface: #FFFFFF;
-  --color-surface-alt: #F2F0EB;
-  --color-border: #E4E1D9;
+  --color-surface-alt: #F3F2EE;
+  --color-border: #E5E2DA;
   --color-ink: #0F0F0F;
-  --color-ink-secondary: #5C5854;
-  --color-ink-tertiary: #9C9894;
-  --color-primary: #0F0F0F;
-  --color-primary-hover: #2D2D2D;
-  --color-accent: #C0392B;
-  --color-accent-hover: #A93226;
-  --color-accent-light: #FEF2F2;
-  --color-gold: #B8922E;
-  --color-gold-light: #FEF9EC;
+  --color-ink-secondary: #4B4742;
+  --color-ink-tertiary: #8B8682;
+  --color-primary: #0F172A;          /* Midnight Navy — dark chrome / CTAs */
+  --color-primary-hover: #1E293B;
+  --color-accent: #00D8C8;           /* Electric Teal — primary brand accent */
+  --color-accent-hover: #00BFB0;
+  --color-accent-light: #E6FCFA;     /* tinted bg for badges, chips */
+  --color-accent-glow: rgba(0, 216, 200, 0.30); /* used by .cta-glow box-shadow */
+  --color-gold: #A3FF12;             /* Signal Lime — kept under "gold" var name so existing utilities work */
+  --color-gold-light: #F4FFE0;
   --color-success: #16A34A;
   --color-success-light: #F0FDF4;
   --color-warning: #D97706;
@@ -23,9 +35,22 @@
   --color-info: #0284C7;
   --color-info-light: #EFF6FF;
 
-  --font-display: 'Bebas Neue', sans-serif;
+  /* Brand-specific dark surface tones (splash, app icon, dark navbar mode). */
+  --color-midnight: #0F172A;
+  --color-slate-deep: #1E293B;
+  --color-slate: #334155;
+
+  /* Reusable gradients for hero CTAs + cards. Defined once here so every
+     component that wants the "premium" feel can reference the same recipe. */
+  --gradient-primary:   linear-gradient(135deg, #00D8C8 0%, #0AB0A2 100%);
+  --gradient-brand:     linear-gradient(135deg, #00D8C8 0%, #A3FF12 100%);
+  --gradient-dark:      linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+
+  /* Poppins is the new primary; Bebas/Cormorant kept under their old aliases
+     so legacy classes (hero-display, font-serif) don't break overnight. */
+  --font-display: 'Poppins', 'Inter', system-ui, sans-serif;
   --font-serif: 'Cormorant Garamond', serif;
-  --font-body: 'Figtree', sans-serif;
+  --font-body: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -37,11 +62,37 @@ html {
 }
 
 body {
-  font-family: 'Figtree', sans-serif;
+  font-family: 'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   background-color: #FAFAF8;
   color: #0F0F0F;
   line-height: 1.6;
   margin: 0;
+  -webkit-font-feature-settings: 'cv11', 'ss01';   /* Poppins stylistic alternates */
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* Arabic locale: switch to Tajawal across the board (it has all weights we use
+   and renders cleanly at small and display sizes). Bebas Neue / Cormorant
+   Garamond don't ship Arabic glyphs, so the system inherits Tajawal too. */
+html[lang="ar"] body {
+  font-family: 'Tajawal', 'Figtree', sans-serif;
+}
+html[lang="ar"] .hero-display {
+  font-family: 'Tajawal', sans-serif !important;
+  letter-spacing: 0 !important;
+  font-weight: 700;
+}
+
+/* Latin-numeric runs (prices, quantities) inside RTL stay LTR so digits read
+   left-to-right and currency symbols line up correctly. */
+html[dir="rtl"] [data-bidi-isolate] {
+  unicode-bidi: isolate;
+  direction: ltr;
+}
+
+/* Flip directional icons (arrows / chevrons) in RTL so "next" still points forward. */
+html[dir="rtl"] [data-rtl-flip] {
+  transform: scaleX(-1);
 }
 
 #root { min-height: 100vh; }
@@ -51,6 +102,24 @@ body {
 ::-webkit-scrollbar-thumb { background: #C8C4BC; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #9C9894; }
 
+.quick-chips-row::-webkit-scrollbar { display: none; }
+.quick-chip:active { transform: scale(0.96); }
+.quick-chip:hover  { box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
+
+/* Premium CTA glow — apply to any primary button (Add to Cart, Buy Now, etc.)
+   for a subtle teal halo that pulls the eye. Pure CSS, no JS. */
+.cta-glow {
+  box-shadow: 0 8px 24px -8px var(--color-accent-glow),
+              0 2px 6px rgba(15,23,42,0.06);
+  transition: box-shadow 0.25s ease, transform 0.15s ease;
+}
+.cta-glow:hover {
+  box-shadow: 0 12px 32px -8px var(--color-accent-glow),
+              0 4px 10px rgba(15,23,42,0.08);
+  transform: translateY(-1px);
+}
+.cta-glow:active { transform: translateY(0); }
+
 :focus-visible { outline: 2px solid #C0392B; outline-offset: 2px; }
 
 @keyframes fadeIn   { from { opacity: 0; transform: translateY(8px); }  to { opacity: 1; transform: translateY(0); } }
@@ -58,6 +127,19 @@ body {
 @keyframes slideUp   { from { opacity: 0; transform: translateY(16px); }  to { opacity: 1; transform: translateY(0); } }
 @keyframes scaleIn   { from { opacity: 0; transform: scale(0.95); }       to { opacity: 1; transform: scale(1); } }
 @keyframes shimmer   { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+/* Skeleton loaders. Subtle horizontal gradient + shimmer keyframes give the
+   classic "loading content" feel without the cognitive cost of a spinner. */
+.skeleton {
+  background: linear-gradient(90deg, #ECE9E2 0%, #F5F2EC 50%, #ECE9E2 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+  display: block;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: #ECE9E2; }
+}
 @keyframes spin      { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes toastIn   { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
 @keyframes pageIn    { from { opacity: 0; transform: translateY(48px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -232,8 +314,11 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 .press:active { transform: scale(0.97); }
 
 /* Count-badge pop */
-@keyframes badgePop { 0% { transform: scale(0); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
-.animate-badge-pop { animation: badgePop 0.32s var(--ease-out-back) both; }
+/* Pulse-in: the badge appears already at its full size and overshoots once
+   instead of scaling from 0. Keeps the cart/wishlist count visually steady
+   while still drawing the eye when a new item lands. */
+@keyframes badgePop { 0% { transform: scale(1.35); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
+.animate-badge-pop { animation: badgePop 0.36s var(--ease-out-back) both; }
 
 /* Right-side drawer slide-in (cart) */
 @keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
@@ -295,6 +380,66 @@ a, button, [role="button"], input, select, textarea, label, summary {
 @supports (padding: max(0px)) {
   .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
   .pt-safe { padding-top:  max(0px,  env(safe-area-inset-top)); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   PRODUCT DETAIL PAGE — Mobile responsive fixes
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Drop cap in the description tab — 3.5em looks great on desktop but
+   dominates the whole first paragraph on narrow phones. */
+.pdp-dropcap { font-size: 3.5em; }
+@media (max-width: 480px) {
+  .pdp-dropcap { font-size: 2.2em; margin-right: 6px; margin-top: 2px; }
+}
+
+/* PDP action row — Add to Cart + 3 icon buttons. On phones the icons need
+   to be tighter so the CTA keeps a usable width. */
+.pdp-action-row    { display: flex; gap: 10px; }
+.pdp-action-icon   { width: 52px !important; height: 52px !important; flex-shrink: 0; }
+@media (max-width: 480px) {
+  .pdp-action-row  { gap: 6px; }
+  .pdp-action-icon { width: 44px !important; height: 44px !important; border-radius: 12px !important; }
+}
+
+/* Trust badge row at the bottom of the CTA card. Items wrap on narrow widths. */
+.pdp-trust-row {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid #E4E1D9;
+  font-size: 12px; color: #5C5854;
+}
+.pdp-trust-row > * { display: flex; align-items: center; gap: 6px; min-width: 0; }
+@media (max-width: 380px) {
+  .pdp-trust-row { gap: 8px; font-size: 11px; }
+  .pdp-trust-row > * { flex: 1 1 100%; }
+}
+
+/* PDP info column container — slightly tighter horizontal padding on phones
+   so the price/CTA can breathe. */
+@media (max-width: 480px) {
+  .pdp-info-col { padding-left: 4px; padding-right: 4px; }
+}
+
+/* FBT image strip — 104px tiles fit on desktop but overflow at 390px mobile.
+   Shrink the tiles + tighten plus signs and gaps on narrow widths. */
+.fbt-tile { width: 104px; height: 104px; }
+.fbt-plus { font-size: 24px; }
+.fbt-strip { gap: 12px; }
+@media (max-width: 480px) {
+  .fbt-tile  { width: 78px;  height: 78px;  }
+  .fbt-plus  { font-size: 18px; }
+  .fbt-strip { gap: 6px; }
+}
+
+/* "More from ___" related-products heading — clamp on tight widths so the
+   carousel above doesn't push the heading off-canvas. */
+.pdp-related-heading {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(1.5rem, 6vw, 2.5rem);
+  letter-spacing: 0.03em;
+  line-height: 1;
+  margin: 0;
 }
 
 /* ── Accessibility: honour reduced-motion globally ───────────────────────── */

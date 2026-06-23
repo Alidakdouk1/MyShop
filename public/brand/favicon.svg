@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pick&amp;Go LB">
+  <title>Pick&amp;Go LB</title>
+  <defs>
+    <linearGradient id="fg" x1="0.18" y1="0" x2="0.6" y2="1">
+      <stop offset="0%"   stop-color="#00D1C1"/>
+      <stop offset="55%"  stop-color="#54E89A"/>
+      <stop offset="100%" stop-color="#A3FF12"/>
+    </linearGradient>
+  </defs>
+  <!--
+    Favicon-optimised PG monogram. Geometry is simpler than icon.svg
+    so the shape stays legible at 16-32 px (the OS/browser favicon range).
+    No accent chevron — it would mush at this size.
+  -->
+  <rect width="64" height="64" rx="12" fill="#0F172A"/>
+  <path fill="url(#fg)" fill-rule="evenodd" d="
+    M 12 8
+    L 40 8
+    L 56 24
+    L 40 40
+    L 28 40
+    L 28 32
+    L 36 32
+    L 46 24
+    L 36 16
+    L 20 16
+    L 20 40
+    L 28 40
+    L 28 48
+    L 20 48
+    L 20 56
+    L 12 56
+    Z
+    M 28 20
+    L 28 32
+    L 36 32
+    L 40 28
+    L 40 24
+    L 36 20
+    Z
+  "/>
+</svg>

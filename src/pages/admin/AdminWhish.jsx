@@ -96,6 +96,19 @@ export default function AdminWhish() {
           </div>
         </div>
 
+        {/* Deep link — opened automatically after Place Order */}
+        <div className="pt-4 border-t border-black/5">
+          <label className="text-xs font-bold uppercase tracking-wider text-ink-tertiary block mb-1">Whish app deep link</label>
+          <input className={`${field} font-mono`} value={form.whish_deeplink || ''}
+            onChange={e => patch('whish_deeplink', e.target.value)}
+            placeholder="whish://" />
+          <p className="text-[11px] text-ink-tertiary mt-1 leading-relaxed">
+            When a customer picks Whish at checkout and taps <span className="font-semibold">Place Order</span>, the site opens this link
+            so the Whish app launches on their phone. Default is <span className="font-mono">whish://</span> — works on most devices with
+            Whish installed. If Whish gives you a personal "Pay me" link, paste it here instead.
+          </p>
+        </div>
+
         {/* Instructions */}
         <div className="pt-4 border-t border-black/5">
           <label className="text-xs font-bold uppercase tracking-wider text-ink-tertiary block mb-1">Instructions for the customer</label>

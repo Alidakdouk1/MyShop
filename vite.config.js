@@ -10,6 +10,12 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
   ],
   server: {
+    // GSI's popup posts the credential back via postMessage to the opener.
+    // Default Vite COOP blocks that — relax it to allow same-origin popups
+    // (still safe, just doesn't isolate from popups we open ourselves).
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
     proxy: {
       '/MyShop/backend': {
         target: 'http://localhost',

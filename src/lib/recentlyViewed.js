@@ -1,9 +1,15 @@
 // Lightweight "recently viewed" store backed by localStorage.
 // We persist a compact product summary (enough for ProductCard) so rendering
 // the row needs no extra API calls. Shared across the app; per-browser.
+//
+// Components can subscribe via the `useRecentlyViewed` hook below — it
+// re-renders whenever this tab (or any other tab) updates the list.
+
+import { useEffect, useState } from 'react'
 
 const KEY = 'myshop_recently_viewed'
 const MAX = 12
+const EVENT = 'myshop:recently-viewed-changed'
 
 export function getRecentlyViewed() {
   try {
@@ -29,4 +35,26 @@ export function addRecentlyViewed(product) {
   }
   const next = [entry, ...getRecentlyViewed().filter(p => p.id !== product.id)].slice(0, MAX)
   try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* quota / disabled — ignore */ }
+  try { window.dispatchEvent(new Event(EVENT)) } catch { /* SSR / no window */ }
+}
+
+export function clearRecentlyViewed() {
+  try { localStorage.removeItem(KEY) } catch { /* ignore */ }
+  try { window.dispatchEvent(new Event(EVENT)) } catch { /* ignore */ }
+}
+
+// React subscription. Updates when this tab or any other tab writes.
+export function useRecentlyViewed() {
+  const [list, setList] = useState(getRecentlyViewed)
+  useEffect(() => {
+    const sync = () => setList(getRecentlyViewed())
+    window.addEventListener(EVENT, sync)
+    const onStorage = (e) => { if (e.key === KEY) sync() }
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(EVENT, sync)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
+  return list
 }

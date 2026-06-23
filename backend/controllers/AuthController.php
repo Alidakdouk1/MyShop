@@ -82,6 +82,22 @@ class AuthController
             error('Invalid email or password.', 401);
         }
 
+        // 2FA gate — if enabled, return a short-lived challenge token instead
+        // of issuing access. Client must call /api/auth/2fa/verify-login with
+        // a 6-digit code (or a backup code) using this challenge.
+        if (!empty($user['two_factor_enabled']) && !empty($user['two_factor_secret'])) {
+            $challenge = JWTHelper::encode([
+                'sub'  => $user['id'],
+                'type' => '2fa_challenge',
+                'iat'  => time(),
+                'exp'  => time() + 300, // 5 min window
+            ]);
+            success([
+                'two_factor_required' => true,
+                'challenge'           => $challenge,
+            ], 'Two-factor authentication required.');
+        }
+
         $accessToken  = JWTHelper::accessToken($user);
         $refreshToken = JWTHelper::refreshToken($user);
 
@@ -95,6 +111,154 @@ class AuthController
             'access_token' => $accessToken,
             'user'         => $this->users->safe($user),
         ], 'Login successful');
+    }
+
+    /**
+     * POST /api/auth/2fa/verify-login — second step of login when 2FA is on.
+     * Body: { challenge, code }. Code is either a 6-digit TOTP from their app
+     * or a single-use backup code. Returns full tokens on success.
+     */
+    public function verifyTwoFactorLogin(): never
+    {
+        method('POST');
+        RateLimiter::check('2fa_verify', 10, 60);
+        $data      = getBody();
+        $challenge = (string) ($data['challenge'] ?? '');
+        $code      = trim((string) ($data['code'] ?? ''));
+        if (!$challenge || !$code) error('Challenge and code are required.', 422);
+
+        $payload = JWTHelper::decode($challenge);
+        if (!$payload || ($payload['type'] ?? '') !== '2fa_challenge') {
+            error('Challenge expired. Please log in again.', 401);
+        }
+
+        $user = $this->users->findById((int) $payload['sub']);
+        if (!$user || empty($user['two_factor_enabled']) || empty($user['two_factor_secret'])) {
+            error('Two-factor is not enabled for this account.', 400);
+        }
+
+        $valid = false;
+        $usedBackup = null;
+
+        // Try TOTP first; fall back to backup codes.
+        if (TOTPHelper::verify($user['two_factor_secret'], $code)) {
+            $valid = true;
+        } else {
+            $backups = $user['two_factor_backup_codes']
+                ? (json_decode($user['two_factor_backup_codes'], true) ?: [])
+                : [];
+            $idx = TOTPHelper::verifyBackup($backups, $code);
+            if ($idx !== null) {
+                $valid = true;
+                $usedBackup = $idx;
+                array_splice($backups, $idx, 1); // single-use: remove it
+            }
+        }
+
+        if (!$valid) error('Invalid two-factor code.', 401);
+
+        $accessToken  = JWTHelper::accessToken($user);
+        $refreshToken = JWTHelper::refreshToken($user);
+
+        $update = [
+            'refresh_token_hash' => password_hash($refreshToken, PASSWORD_BCRYPT),
+            'last_login_at'      => date('Y-m-d H:i:s'),
+        ];
+        if ($usedBackup !== null) {
+            $update['two_factor_backup_codes'] = json_encode($backups);
+        }
+        $this->users->update($user['id'], $update);
+
+        AuthMiddleware::setRefreshCookie($refreshToken);
+        success([
+            'access_token' => $accessToken,
+            'user'         => $this->users->safe($user),
+            'backup_used'  => $usedBackup !== null,
+        ], 'Login successful.');
+    }
+
+    /**
+     * GET /api/auth/2fa/setup — start 2FA enrollment. Generates a fresh secret
+     * (stored unverified) and returns the otpauth:// URI for the QR code.
+     * Frontend renders the QR, user scans it, then POSTs /enable with the
+     * first generated code to confirm the app is configured correctly.
+     */
+    public function setupTwoFactor(): never
+    {
+        method('GET');
+        $auth   = AuthMiddleware::require();
+        $user   = $this->users->findById((int) $auth['sub']);
+        if (!$user) error('User not found.', 404);
+
+        $secret = TOTPHelper::generateSecret();
+        // Stage the secret. enabled stays 0 until /enable confirms.
+        $this->users->update($user['id'], [
+            'two_factor_secret'  => $secret,
+            'two_factor_enabled' => 0,
+        ]);
+
+        $uri = TOTPHelper::provisioningUri(
+            $secret,
+            $user['email'],
+            env('APP_NAME', 'Pick&Go LB')
+        );
+
+        success(['secret' => $secret, 'otpauth_uri' => $uri]);
+    }
+
+    /**
+     * POST /api/auth/2fa/enable — confirm the user's app is set up by
+     * verifying a code they generated from it. Returns one-time backup codes.
+     */
+    public function enableTwoFactor(): never
+    {
+        method('POST');
+        $auth   = AuthMiddleware::require();
+        $code   = trim((string) (getBody()['code'] ?? ''));
+        if (!$code) error('Code is required.', 422);
+
+        $user = $this->users->findById((int) $auth['sub']);
+        if (!$user || empty($user['two_factor_secret'])) {
+            error('Run /2fa/setup first to generate a secret.', 400);
+        }
+        if (!TOTPHelper::verify($user['two_factor_secret'], $code)) {
+            error('Invalid code. Make sure your phone clock is accurate.', 422);
+        }
+
+        $backupCodes = TOTPHelper::generateBackupCodes();
+        $this->users->update($user['id'], [
+            'two_factor_enabled'      => 1,
+            'two_factor_backup_codes' => json_encode($backupCodes),
+            'two_factor_enabled_at'   => date('Y-m-d H:i:s'),
+        ]);
+
+        success(['backup_codes' => $backupCodes], 'Two-factor authentication is now active.');
+    }
+
+    /**
+     * POST /api/auth/2fa/disable — turn 2FA off. Requires the current password
+     * (so a stolen access token alone can't disable it).
+     */
+    public function disableTwoFactor(): never
+    {
+        method('POST');
+        $auth     = AuthMiddleware::require();
+        $password = (string) (getBody()['password'] ?? '');
+        if (!$password) error('Password is required.', 422);
+
+        $user = $this->users->findById((int) $auth['sub']);
+        if (!$user || !password_verify($password, $user['password_hash'])) {
+            error('Incorrect password.', 401);
+        }
+
+        $this->users->update($user['id'], [
+            'two_factor_enabled'      => 0,
+            'two_factor_secret'       => null,
+            'two_factor_backup_codes' => null,
+            'two_factor_enabled_at'   => null,
+        ]);
+
+        success(null, 'Two-factor authentication disabled.');
     }
 
     public function googleLogin(): never

@@ -87,14 +87,16 @@ export default function FrequentlyBoughtTogether({ current, items = [], currentA
         </h2>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 32, alignItems: 'flex-start' }}>
-          {/* Image strip joined with "+" */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {/* Image strip joined with "+" — tiles shrink to 78px on mobile via
+              .fbt-tile so the row fits inside a 390px viewport. */}
+          <div className="fbt-strip" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             {rows.map((r, i) => (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div key={r.id} className="fbt-strip" style={{ display: 'flex', alignItems: 'center' }}>
                 <Link
                   to={`/products/${r.slug}`}
+                  className="fbt-tile"
                   style={{
-                    width: 104, height: 104, borderRadius: 14, overflow: 'hidden',
+                    borderRadius: 14, overflow: 'hidden',
                     background: '#EEECE6', display: 'block',
                     border: checked.has(r.id) ? '2px solid #0F0F0F' : '2px solid transparent',
                     opacity: r._addable ? 1 : 0.55, flexShrink: 0,
@@ -104,7 +106,7 @@ export default function FrequentlyBoughtTogether({ current, items = [], currentA
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </Link>
                 {i < rows.length - 1 && (
-                  <span style={{ fontSize: 24, fontWeight: 300, color: '#C8C4BC' }}>+</span>
+                  <span className="fbt-plus" style={{ fontWeight: 300, color: '#C8C4BC' }}>+</span>
                 )}
               </div>
             ))}

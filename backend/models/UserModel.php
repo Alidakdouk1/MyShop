@@ -64,13 +64,13 @@ class UserModel extends BaseModel
 
     public function all(int $limit, int $offset, string $search = '', string $role = ''): array
     {
-        $where  = $role ? "WHERE role = ?" : '';
+        $where  = $role ? "WHERE u.role = ?" : '';
         $params = $role ? [$role] : [];
 
         if ($search) {
             $where    = $role
-                ? "WHERE role = ? AND (name LIKE ? OR email LIKE ?)"
-                : "WHERE name LIKE ? OR email LIKE ?";
+                ? "WHERE u.role = ? AND (u.name LIKE ? OR u.email LIKE ?)"
+                : "WHERE u.name LIKE ? OR u.email LIKE ?";
             $params   = $role
                 ? [$role, "%{$search}%", "%{$search}%"]
                 : ["%{$search}%", "%{$search}%"];
@@ -79,8 +79,10 @@ class UserModel extends BaseModel
         $params[] = $limit;
         $params[] = $offset;
         return $this->query(
-            "SELECT id, name, email, role, is_verified, created_at FROM users
-             {$where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            "SELECT u.id, u.name, u.email, u.role, u.is_verified, u.vip_level, u.created_at,
+                    (SELECT COUNT(*) FROM customer_notes WHERE user_id = u.id) AS notes_count
+             FROM users u
+             {$where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?",
             $params
         )->fetchAll();
     }
@@ -111,7 +113,8 @@ class UserModel extends BaseModel
     {
         unset($user['password_hash'], $user['email_verification_token'],
               $user['password_reset_token'], $user['password_reset_expires'],
-              $user['refresh_token_hash']);
+              $user['refresh_token_hash'],
+              $user['two_factor_secret'], $user['two_factor_backup_codes']);
         return $user;
     }
 }

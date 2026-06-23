@@ -278,16 +278,81 @@ class AdminController
 
         $model    = new ProductModel();
         $affected = match ($action) {
-            'activate'  => $model->bulkUpdateStatus($ids, 'active'),
-            'draft'     => $model->bulkUpdateStatus($ids, 'draft'),
-            'archive'   => $model->bulkUpdateStatus($ids, 'archived'),
-            'feature'   => $model->bulkSetFeatured($ids, true),
-            'unfeature' => $model->bulkSetFeatured($ids, false),
-            'delete'    => $model->bulkDelete($ids),
-            default     => null,
+            'activate'     => $model->bulkUpdateStatus($ids, 'active'),
+            'draft'        => $model->bulkUpdateStatus($ids, 'draft'),
+            'archive'      => $model->bulkUpdateStatus($ids, 'archived'),
+            'feature'      => $model->bulkSetFeatured($ids, true),
+            'unfeature'    => $model->bulkSetFeatured($ids, false),
+            'delete'       => $model->bulkDelete($ids),
+            'price_adjust' => $model->bulkAdjustPrice($ids, (float) ($data['percent'] ?? 0)),
+            default        => null,
         };
         if ($affected === null) error('Unknown action.', 422);
         success(['affected' => $affected], "Updated {$affected} product" . ($affected === 1 ? '' : 's') . '.');
+    }
+
+    /**
+     * Bulk update order statuses. Triggers shipped/delivered emails per row,
+     * same as the single-row endpoint, so notifications stay consistent.
+     */
+    public function bulkOrders(): never
+    {
+        method('POST');
+        $this->guard();
+        $data    = getBody();
+        $action  = $data['action'] ?? '';
+        $status  = $data['status'] ?? '';
+        $ids     = is_array($data['ids'] ?? null) ? array_map('intval', $data['ids']) : [];
+        if (!$ids)    error('No orders selected.', 422);
+        if (!$action) error('Action is required.', 422);
+
+        $orders = new OrderModel();
+        $count  = 0;
+
+        if ($action === 'status_update') {
+            $allowed = ['pending','confirmed','shipped','delivered','cancelled','refunded'];
+            if (!in_array($status, $allowed, true)) error('Invalid status.', 422);
+            foreach ($ids as $id) {
+                $prev = $orders->findById($id);
+                if (!$prev) continue;
+                $orders->setStatusWithStockSync($id, $status);
+                $count++;
+                if ($prev['status'] !== $status && in_array($status, ['shipped','delivered'], true)) {
+                    $order = $orders->withItems($id);
+                    $user  = (new UserModel())->findById((int) $order['user_id']);
+                    if ($user) {
+                        $carrierName = !empty($order['carrier']) ? ucfirst(str_replace('_', ' ', (string) $order['carrier'])) : null;
+                        if ($status === 'shipped') {
+                            MailHelper::orderShipped(
+                                $user['email'], $user['name'], $order,
+                                $carrierName,
+                                $order['tracking_number'] ?? null,
+                                $order['tracking_url']    ?? null,
+                            );
+                            PushHelper::sendToUser((int) $user['id'], [
+                                'title' => 'Your order is on the way',
+                                'body'  => $carrierName
+                                            ? "Order MS-{$id} shipped via {$carrierName}. Tap to track."
+                                            : "Order MS-{$id} shipped. Tap to track.",
+                                'url'   => "/account/orders/{$id}",
+                                'tag'   => "order-{$id}",
+                            ]);
+                        } else {
+                            MailHelper::orderDelivered($user['email'], $user['name'], $order);
+                            PushHelper::sendToUser((int) $user['id'], [
+                                'title' => 'Order delivered',
+                                'body'  => "Order MS-{$id} arrived. Hope you love it!",
+                                'url'   => "/account/orders/{$id}",
+                                'tag'   => "order-{$id}",
+                            ]);
+                        }
+                    }
+                }
+            }
+        } else {
+            error('Unknown action.', 422);
+        }
+        success(['affected' => $count], "Updated {$count} order" . ($count === 1 ? '' : 's') . '.');
     }
 
     // ── Abandoned carts ─────────────────────────────────────────────────────
@@ -420,6 +485,95 @@ class AdminController
         $items  = $model->all($perPage, $offset, $search, 'customer');
         $total  = $model->count($search, 'customer');
         paginated($items, $total, $page, $perPage);
+    }
+
+    /** Single-customer profile with everything the admin drawer needs. */
+    public function userDetail(int $id): never
+    {
+        method('GET');
+        $this->guard();
+        $db   = getDB();
+        $stmt = $db->prepare(
+            "SELECT u.id, u.name, u.email, u.phone, u.role, u.is_verified, u.vip_level,
+                    u.created_at, u.last_login_at,
+                    (SELECT COUNT(*) FROM orders   WHERE user_id = u.id)                                   AS orders_count,
+                    (SELECT COALESCE(SUM(total), 0) FROM orders WHERE user_id = u.id AND status NOT IN ('cancelled','refunded')) AS lifetime_value,
+                    (SELECT MAX(created_at) FROM orders WHERE user_id = u.id)                              AS last_order_at
+             FROM users u
+             WHERE u.id = ?"
+        );
+        $stmt->execute([$id]);
+        $user = $stmt->fetch();
+        if (!$user) error('User not found.', 404);
+
+        $user['notes'] = (new CustomerNoteModel())->forUser($id);
+        success($user);
+    }
+
+    public function setVipLevel(int $id): never
+    {
+        method('PUT');
+        $this->guard();
+        $data  = getBody();
+        $level = sanitize($data['vip_level'] ?? '');
+        if (!in_array($level, ['regular', 'vip', 'gold'], true)) {
+            error('Invalid VIP level.', 422);
+        }
+        getDB()->prepare("UPDATE users SET vip_level = ? WHERE id = ?")->execute([$level, $id]);
+        success(['vip_level' => $level], 'VIP level updated.');
+    }
+
+    public function listNotes(int $userId): never
+    {
+        method('GET');
+        $this->guard();
+        success((new CustomerNoteModel())->forUser($userId));
+    }
+
+    public function addNote(int $userId): never
+    {
+        method('POST');
+        $auth = $this->guard();
+        $data = getBody();
+        $body = trim((string) ($data['body'] ?? ''));
+        if ($body === '') error('Note body is required.', 422);
+        // Confirm the customer exists before writing.
+        $exists = getDB()->prepare("SELECT id FROM users WHERE id = ?");
+        $exists->execute([$userId]);
+        if (!$exists->fetch()) error('User not found.', 404);
+
+        $note = (new CustomerNoteModel())->create(
+            $userId, (int) $auth['sub'], $body, !empty($data['pinned'])
+        );
+        success($note, 'Note added.', 201);
+    }
+
+    public function updateNote(int $id): never
+    {
+        method('PUT');
+        $this->guard();
+        $notes = new CustomerNoteModel();
+        $note  = $notes->find($id);
+        if (!$note) error('Note not found.', 404);
+
+        $data = getBody();
+        $patch = [];
+        if (array_key_exists('body',   $data)) $patch['body']   = trim((string) $data['body']);
+        if (array_key_exists('pinned', $data)) $patch['pinned'] = (int) (bool) $data['pinned'];
+        if (isset($patch['body']) && $patch['body'] === '') error('Note body cannot be empty.', 422);
+
+        $notes->update($id, $patch);
+        success(null, 'Note updated.');
+    }
+
+    public function deleteNote(int $id): never
+    {
+        method('DELETE');
+        $this->guard();
+        $notes = new CustomerNoteModel();
+        if (!$notes->find($id)) error('Note not found.', 404);
+        $notes->delete($id);
+        success(null, 'Note deleted.');
     }
 
     public function updateUserRole(int $id): never
@@ -644,8 +798,73 @@ class AdminController
         $status  = $data['status'] ?? '';
         $allowed = ['pending','confirmed','shipped','delivered','cancelled','refunded'];
         if (!in_array($status, $allowed, true)) error('Invalid status.', 422);
-        (new OrderModel())->setStatusWithStockSync($id, $status);
+
+        $orders = new OrderModel();
+        $prev   = $orders->findById($id);
+        $orders->setStatusWithStockSync($id, $status);
+
+        // Transactional emails for shipped / delivered. Only fire when the
+        // status actually changed so re-saving the same status doesn't spam.
+        if ($prev && $prev['status'] !== $status && in_array($status, ['shipped','delivered'], true)) {
+            $order = $orders->withItems($id);
+            $user  = (new UserModel())->findById((int) $order['user_id']);
+            if ($user) {
+                $carrierName = !empty($order['carrier']) ? ucfirst(str_replace('_', ' ', (string) $order['carrier'])) : null;
+                if ($status === 'shipped') {
+                    MailHelper::orderShipped(
+                        $user['email'], $user['name'], $order,
+                        $carrierName,
+                        $order['tracking_number'] ?? null,
+                        $order['tracking_url']    ?? null,
+                    );
+                    PushHelper::sendToUser((int) $user['id'], [
+                        'title' => 'Your order is on the way',
+                        'body'  => $carrierName
+                                    ? "Order MS-{$id} shipped via {$carrierName}. Tap to track."
+                                    : "Order MS-{$id} shipped. Tap to track.",
+                        'url'   => "/account/orders/{$id}",
+                        'tag'   => "order-{$id}",
+                    ]);
+                } else {
+                    MailHelper::orderDelivered($user['email'], $user['name'], $order);
+                    PushHelper::sendToUser((int) $user['id'], [
+                        'title' => 'Order delivered',
+                        'body'  => "Order MS-{$id} arrived. Hope you love it!",
+                        'url'   => "/account/orders/{$id}",
+                        'tag'   => "order-{$id}",
+                    ]);
+                }
+            }
+        }
+
         success(null, 'Order status updated.');
+    }
+
+    /** PUT /api/admin/orders/{id}/tracking — set carrier + tracking# for shipment. */
+    public function updateOrderTracking(int $id): never
+    {
+        method('PUT');
+        $this->guard();
+        $data    = getBody();
+        // Whitelisted carrier slugs — frontend uses the same list to render
+        // the dropdown + build the click-through URL.
+        $carriers = ['aramex','dhl','fedex','wakilni','libanpost','liban_express','bosta','other'];
+        $carrier  = isset($data['carrier']) ? strtolower(trim((string) $data['carrier'])) : '';
+        if ($carrier !== '' && !in_array($carrier, $carriers, true)) error('Unknown carrier.', 422);
+        $tracking = trim((string) ($data['tracking_number'] ?? ''));
+        $url      = trim((string) ($data['tracking_url']    ?? ''));
+        // url must be http(s) if provided
+        if ($url !== '' && !preg_match('#^https?://#i', $url)) error('Tracking URL must start with http:// or https://', 422);
+
+        getDB()->prepare(
+            "UPDATE orders SET carrier = ?, tracking_number = ?, tracking_url = ? WHERE id = ?"
+        )->execute([
+            $carrier      ?: null,
+            $tracking     ?: null,
+            $url          ?: null,
+            $id,
+        ]);
+        success(null, 'Tracking updated.');
     }
 
     // ── Products ──────────────────────────────────────────────────────────────
@@ -728,19 +947,101 @@ class AdminController
 
         $data   = getBody();
         $fields = ['name','description','base_price','sale_price','stock_qty','low_stock_threshold','release_date',
-                   'category_id','status','is_featured','weight','sku'];
+                   'category_id','status','is_featured','weight','sku',
+                   'seo_title','seo_description','seo_og_image'];
         $update = [];
         foreach ($fields as $f) {
             if (array_key_exists($f, $data)) {
                 $update[$f] = is_string($data[$f]) ? sanitize($data[$f]) : $data[$f];
             }
         }
+        // Specs (array of {label, value}) — encoded to JSON; null wipes them.
+        if (array_key_exists('specs', $data)) {
+            $update['specs'] = self::normalizeSpecs($data['specs']);
+        }
         if (!empty($update['name'])) {
             $update['slug'] = preg_replace('/[^a-z0-9]+/', '-', strtolower($update['name']))
                             . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
         }
         $model->update($id, $update);
+
+        // Back-in-stock fan-out: if stock_qty just crossed from 0 to positive,
+        // fire every pending notification subscriber. Don't trigger when the
+        // admin is editing a still-out-of-stock or already-in-stock product.
+        $beforeStock = (int) ($product['stock_qty']     ?? 0);
+        $afterStock  = array_key_exists('stock_qty', $update)
+            ? (int) $update['stock_qty']
+            : $beforeStock;
+        if ($beforeStock <= 0 && $afterStock > 0) {
+            $this->notifyBackInStockSubscribers($id, $model->findById($id));
+        }
+
         success($model->findById($id), 'Product updated.');
+    }
+
+    /** Email + push fan-out for back-in-stock subscribers. Marks rows as notified. */
+    private function notifyBackInStockSubscribers(int $productId, array $product): void
+    {
+        $notifModel = new StockNotificationModel();
+        $rows       = $notifModel->pendingForProduct($productId);
+        if (!$rows) return;
+
+        $url       = env('FRONTEND_URL', 'http://localhost:5173');
+        $productUrl = "{$url}/products/" . urlencode($product['slug'] ?? '');
+        $left      = max(1, (int) ($product['stock_qty'] ?? 1));
+        $title     = (string) ($product['name'] ?? 'Item');
+
+        $notified = [];
+        foreach ($rows as $r) {
+            $ok = false;
+            if (!empty($r['email'])) {
+                // Lightweight inline mail since the helper doesn't have a
+                // back-in-stock template yet — keep it simple, brand-styled.
+                $html = "<p>Good news! <strong>" . htmlspecialchars($title) . "</strong> is back in stock.</p>"
+                      . "<p>" . ($left <= 5 ? "Only {$left} left — " : '') . "<a href='{$productUrl}'>tap to grab one</a> before it's gone.</p>";
+                $ok = MailHelper::send($r['email'], "Back in stock: {$title}", $html);
+            } elseif (!empty($r['push_endpoint'])) {
+                $stmt = getDB()->prepare("SELECT * FROM push_subscriptions WHERE endpoint = ?");
+                $stmt->execute([$r['push_endpoint']]);
+                $sub  = $stmt->fetch();
+                if ($sub) {
+                    $ok = PushHelper::send($sub, [
+                        'title' => "{$title} is back",
+                        'body'  => $left <= 5
+                                    ? "Only {$left} left — grab one before it's gone."
+                                    : "It's back in stock. Tap to view.",
+                        'url'   => "/products/" . ($product['slug'] ?? ''),
+                        'tag'   => "restock-{$productId}",
+                    ]);
+                }
+            }
+            if ($ok || true) $notified[] = (int) $r['id']; // mark notified even on failure to avoid retry spam
+        }
+        $notifModel->markNotified($notified);
+    }
+
+    /**
+     * Sanitize a spec list. Accepts:
+     *   - null / empty array  → returns null (clears the column)
+     *   - array of {label, value} objects, filtering out rows where either field is blank
+     * Returns a JSON-encoded string or null. Caps at 50 rows and trims field lengths
+     * so the editor can't be used as a content-injection vector.
+     */
+    private static function normalizeSpecs(mixed $raw): ?string
+    {
+        if (!is_array($raw) || count($raw) === 0) return null;
+        $out = [];
+        foreach (array_slice($raw, 0, 50) as $row) {
+            if (!is_array($row)) continue;
+            $label = trim((string) ($row['label'] ?? ''));
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($label === '' || $value === '') continue;
+            $out[] = [
+                'label' => mb_substr(sanitize($label), 0, 80),
+                'value' => mb_substr(sanitize($value), 0, 300),
+            ];
+        }
+        return $out ? json_encode($out, JSON_UNESCAPED_UNICODE) : null;
     }
 
     public function deleteProduct(int $id): never

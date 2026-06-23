@@ -5,6 +5,21 @@ class ProductModel extends BaseModel
 {
     protected string $table = 'products';
 
+    /**
+     * Override the parent to decode the `specs` JSON column so every caller
+     * gets an array (or empty array), never a raw JSON string.
+     */
+    public function findById(int $id): ?array
+    {
+        $row = parent::findById($id);
+        if ($row && array_key_exists('specs', $row)) {
+            $row['specs'] = !empty($row['specs'])
+                ? (json_decode((string) $row['specs'], true) ?: [])
+                : [];
+        }
+        return $row;
+    }
+
     public function findBySlug(string $slug): ?array
     {
         $product = $this->query(
@@ -19,6 +34,26 @@ class ProductModel extends BaseModel
 
         $product['images']   = $this->images((int) $product['id']);
         $product['variants'] = $this->variants((int) $product['id']);
+        // Decode JSON specs so the frontend gets a proper array (and a clean
+        // empty array when the column is null) instead of a JSON string.
+        $product['specs']    = !empty($product['specs'])
+            ? (json_decode((string) $product['specs'], true) ?: [])
+            : [];
+
+        // Live "available stock" = raw stock - other carts' active reservations.
+        // PDP uses this for "Only X left" / "Out of stock" badges; admins still
+        // see the raw stock_qty everywhere they manage inventory.
+        $res = new StockReservationModel();
+        $product['available_stock'] = $res->availableForProduct(
+            (int) $product['id'], (int) $product['stock_qty']
+        );
+        foreach ($product['variants'] as &$v) {
+            $v['available_stock'] = $res->availableForVariant(
+                (int) $v['id'], (int) $v['stock_qty']
+            );
+        }
+        unset($v);
+
         return $product;
     }
 
@@ -387,6 +422,29 @@ class ProductModel extends BaseModel
         if (!$ids) return 0;
         $ph = implode(',', array_fill(0, count($ids), '?'));
         return $this->query("DELETE FROM products WHERE id IN ({$ph})", $ids)->rowCount();
+    }
+
+    /**
+     * Adjust both base_price and sale_price by a percentage. Positive bumps
+     * prices up, negative discounts them. Rounds to 2 decimals, clamps at 0.
+     * Sale_price stays NULL where it was NULL — we don't accidentally invent
+     * a sale on products that didn't have one.
+     */
+    public function bulkAdjustPrice(array $ids, float $percent): int
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids) return 0;
+        $multiplier = 1 + ($percent / 100);
+        if ($multiplier < 0) $multiplier = 0;
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        return $this->query(
+            "UPDATE products
+                SET base_price = ROUND(GREATEST(base_price * ?, 0), 2),
+                    sale_price = CASE WHEN sale_price IS NULL THEN NULL
+                                      ELSE ROUND(GREATEST(sale_price * ?, 0), 2) END
+              WHERE id IN ({$ph})",
+            [$multiplier, $multiplier, ...$ids]
+        )->rowCount();
     }
 
     public function featured(int $limit = 8): array

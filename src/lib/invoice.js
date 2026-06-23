@@ -18,8 +18,8 @@ export async function downloadInvoice(order) {
   const dateStr = new Date(order.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
   // Header
-  doc.setFont('helvetica', 'bold');   doc.setFontSize(22); doc.setTextColor(15);  doc.text('MyShop', M, 20)
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);  doc.setTextColor(150); doc.text('support@myshop.com', M, 25)
+  doc.setFont('helvetica', 'bold');   doc.setFontSize(22); doc.setTextColor(15);  doc.text('Pick&Go LB', M, 20)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);  doc.setTextColor(150); doc.text('support@pickandgo.lb', M, 25)
   doc.setFont('helvetica', 'bold');   doc.setFontSize(16); doc.setTextColor(15);  doc.text('INVOICE', right, 19, { align: 'right' })
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);  doc.text(`Order #${orderNo}`, right, 25, { align: 'right' })
   doc.setFontSize(9); doc.setTextColor(150); doc.text(dateStr, right, 30, { align: 'right' })

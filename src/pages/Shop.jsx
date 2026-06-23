@@ -5,8 +5,10 @@ import { getHomepageSettings } from '../api/adminApi'
 import ProductGrid from '../components/product/ProductGrid'
 import ProductFilters from '../components/product/ProductFilters'
 import CategoryBar from '../components/product/CategoryBar'
+import RecentlyViewedRow from '../components/product/RecentlyViewedRow'
 import Pagination from '../components/common/Pagination'
 import Seo from '../components/common/Seo'
+import ImageSearchModal from '../components/search/ImageSearchModal'
 
 function imgSrc(url) {
   if (!url) return null
@@ -54,6 +56,7 @@ export default function Shop() {
   const [meta,         setMeta]         = useState({ total: 0, totalPages: 1, currentPage: 1 })
   const [loading,      setLoading]      = useState(true)
   const [filtersOpen,  setFiltersOpen]  = useState(false)
+  const [imgSearchOpen, setImgSearchOpen] = useState(false)
   const [shopSettings, setShopSettings] = useState(DEFAULT_SHOP)
 
   const filters = {
@@ -125,7 +128,7 @@ export default function Shop() {
     <>
       <Seo
         title={filters.search ? `Search: “${filters.search}”` : (banner.title || 'Shop All Products')}
-        description={banner.subtitle || 'Browse the full MyShop catalogue — filter by price, color, size and more.'}
+        description={banner.subtitle || 'Browse the full Pick&Go LB catalogue — filter by price, color, size and more.'}
         canonical={`${window.location.origin}/shop`}
       />
       {/* ── Category row — full-width bar flush under the search header ── */}
@@ -251,10 +254,29 @@ export default function Shop() {
         <div className="flex-1 min-w-0 pb-8 pr-1">
           {/* Sort By dropdown */}
           <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-            <SortDropdown
-              value={filters.sort}
-              onChange={(v) => applyFilters({ sort: v, page: 1 })}
-            />
+            <div className="flex items-center gap-2">
+              <SortDropdown
+                value={filters.sort}
+                onChange={(v) => applyFilters({ sort: v, page: 1 })}
+              />
+              <button
+                onClick={() => setImgSearchOpen(true)}
+                aria-label="Search by image"
+                title="Search by image"
+                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(0,209,193,0.12), rgba(163,255,18,0.10))',
+                  border: '1px solid rgba(0,209,193,0.35)',
+                  color: '#0AAFA3',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+                <span className="hidden sm:inline">By image</span>
+              </button>
+            </div>
             {!loading && (
               <span className="text-sm text-ink-tertiary">
                 {meta.total} {meta.total === 1 ? 'item' : 'items'}
@@ -312,6 +334,9 @@ export default function Shop() {
         </div>
       </div>
       </div>
+      <RecentlyViewedRow />
+
+      <ImageSearchModal open={imgSearchOpen} onClose={() => setImgSearchOpen(false)} />
     </>
   )
 }

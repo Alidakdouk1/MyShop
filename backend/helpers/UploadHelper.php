@@ -98,6 +98,36 @@ class UploadHelper
         return "uploads/homepage/{$filename}";
     }
 
+    /**
+     * Generic image save to any uploads/{folder}/ subdirectory. Used for
+     * avatars and any future single-purpose upload (e.g. PDP banner).
+     * Returns the path relative to backend/ so the frontend can resolve it.
+     */
+    public static function saveImage(array $file, string $folder): string
+    {
+        self::validate($file);
+
+        // Trim / normalize to a safe slug ([a-z0-9_/-]) so the folder param
+        // can never escape the uploads root via "..".
+        $safe = preg_replace('/[^a-z0-9_\-\/]/i', '', $folder);
+        if ($safe === '' || str_contains($safe, '..')) {
+            throw new InvalidArgumentException('Invalid upload folder.');
+        }
+
+        $dir = __DIR__ . "/../uploads/{$safe}/";
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $ext      = self::ext($file['type']);
+        $filename = bin2hex(random_bytes(16)) . ".{$ext}";
+        $dest     = $dir . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $dest)) {
+            throw new RuntimeException('Failed to move uploaded file');
+        }
+        self::resize($dest, $dir, $filename);
+        return "uploads/{$safe}/{$filename}";
+    }
+
     private static function validate(array $file): void
     {
         if ($file['error'] !== UPLOAD_ERR_OK) {

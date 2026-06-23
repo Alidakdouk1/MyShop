@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { getOrder, cancelOrder, getReturns, createReturn, reorderOrder } from '../../api/orderApi'
 import { getBankTransferInfo, getWhishInfo } from '../../api/paymentApi'
 import { fetchCart } from '../../store/slices/cartSlice'
 import { useToast } from '../../hooks/useToast'
+import { useCurrency } from '../../context/CurrencyContext'
 import { resolveImg } from '../../lib/img'
-import Spinner from '../../components/ui/Spinner'
+import { carrierBySlug, buildTrackingUrl } from '../../lib/carriers'
+import { OrderDetailSkeleton } from '../../components/ui/Skeleton'
+import Confetti from '../../components/common/Confetti'
 import { downloadInvoice } from '../../lib/invoice'
 
 const RETURN_STATUS = {
@@ -121,8 +124,22 @@ function OrderTimeline({ status, history = [] }) {
 export default function OrderDetail() {
   const { id }   = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const dispatch = useDispatch()
   const toast    = useToast()
+  const { format } = useCurrency()
+  // One-shot confetti when arriving here straight from checkout. The flag is
+  // also written to sessionStorage so a refresh doesn't replay the burst.
+  const [showConfetti, setShowConfetti] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const fromCheckout = location.state?.justPlaced === true
+    const key = `myshop_celebrated_order_${id}`
+    if (fromCheckout && !sessionStorage.getItem(key)) {
+      try { sessionStorage.setItem(key, '1') } catch {}
+      return true
+    }
+    return false
+  })
   const [order,      setOrder]      = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [cancelling, setCancelling] = useState(false)
@@ -221,11 +238,7 @@ export default function OrderDetail() {
     } finally { setCancelling(false) }
   }
 
-  if (loading) return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <Spinner size="xl" className="text-ink-tertiary" />
-    </div>
-  )
+  if (loading) return <OrderDetailSkeleton />
   if (!order) return (
     <div className="text-center py-20 text-ink-secondary">Order not found</div>
   )
@@ -248,6 +261,28 @@ export default function OrderDetail() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 animate-page-in">
+
+      {showConfetti && <Confetti onDone={() => setShowConfetti(false)} />}
+
+      {/* Celebration banner — only when the user JUST placed this order. */}
+      {showConfetti && (
+        <div
+          className="mb-6 rounded-2xl p-5 text-center"
+          style={{
+            background:    'linear-gradient(135deg, rgba(0,209,193,0.12) 0%, rgba(163,255,18,0.10) 100%)',
+            border:        '1px solid rgba(0,209,193,0.30)',
+            animation:     'popIn 0.55s cubic-bezier(0.34,1.4,0.64,1) both',
+          }}
+        >
+          <p className="text-2xl mb-1">🎉</p>
+          <p className="text-sm font-bold uppercase tracking-wider" style={{ color: '#0AAFA3' }}>
+            Order placed
+          </p>
+          <p className="text-xs text-ink-tertiary mt-1">
+            Thanks for shopping with Pick&amp;Go LB. We'll keep you posted on every status change.
+          </p>
+        </div>
+      )}
 
       {/* Breadcrumb + header */}
       <div className="mb-8">
@@ -304,6 +339,52 @@ export default function OrderDetail() {
           </div>
         </div>
       </div>
+
+      {/* Shipment tracking — visible once admin sets carrier + tracking# */}
+      {(order.tracking_number || order.tracking_url) && (() => {
+        const c = carrierBySlug(order.carrier)
+        const trackUrl = buildTrackingUrl(order)
+        return (
+          <div className="rounded-2xl p-5 mb-4" style={{ background: '#F5F3FF', border: '1px solid #DDD6FE' }}>
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#EDE9FE', color: '#6D28D9' }}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="3" width="15" height="13" rx="2"/>
+                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                  <circle cx="5.5" cy="18.5" r="2.5"/>
+                  <circle cx="18.5" cy="18.5" r="2.5"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm" style={{ color: '#5B21B6' }}>
+                  Shipped {c ? `via ${c.name}` : ''}
+                </p>
+                {order.tracking_number && (
+                  <p className="text-xs font-mono mt-1" style={{ color: '#6D28D9' }}>
+                    Tracking #: <span className="font-bold">{order.tracking_number}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+            {trackUrl && (
+              <a
+                href={trackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)' }}
+              >
+                Track your shipment
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </a>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Cancel / edit window notice */}
       {isCancellable && (
@@ -380,6 +461,20 @@ export default function OrderDetail() {
           {whish.instructions && (
             <p className="text-xs mt-3 leading-relaxed" style={{ color: '#5C5854' }}>{whish.instructions}</p>
           )}
+
+          {/* Open Whish app — re-triggers the deep link in case the user closed
+              the app or it didn't auto-launch from checkout. */}
+          <a
+            href={whish.whish_deeplink || 'whish://'}
+            className="mt-4 w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12" y2="18"/>
+            </svg>
+            Open Whish App
+          </a>
         </div>
       )}
 

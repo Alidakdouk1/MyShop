@@ -85,7 +85,8 @@ export default function AdminCurrencies() {
         <div className="py-20 flex justify-center"><Spinner size="xl" className="text-ink-tertiary" /></div>
       ) : (
         <div className="bg-white rounded-2xl border border-black/5 overflow-hidden mb-6">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[560px]">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
                 {['Code', 'Name', 'Symbol', 'Rate (per 1 USD)', 'Enabled', ''].map(h => (
@@ -138,6 +139,7 @@ export default function AdminCurrencies() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

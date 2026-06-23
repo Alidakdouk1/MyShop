@@ -221,12 +221,29 @@ class ProductController
 
         $data   = getBody();
         $fields = ['name', 'description', 'base_price', 'sale_price', 'stock_qty', 'low_stock_threshold', 'release_date',
-                   'category_id', 'status', 'is_featured', 'weight'];
+                   'category_id', 'status', 'is_featured', 'weight',
+                   'seo_title', 'seo_description', 'seo_og_image'];
         $update = [];
         foreach ($fields as $f) {
             if (array_key_exists($f, $data)) {
                 $update[$f] = is_string($data[$f]) ? sanitize($data[$f]) : $data[$f];
             }
+        }
+        // Specs (array of {label, value}) — encoded to JSON for storage; null clears.
+        if (array_key_exists('specs', $data)) {
+            $raw   = is_array($data['specs']) ? array_slice($data['specs'], 0, 50) : [];
+            $clean = [];
+            foreach ($raw as $row) {
+                if (!is_array($row)) continue;
+                $label = trim((string) ($row['label'] ?? ''));
+                $value = trim((string) ($row['value'] ?? ''));
+                if ($label === '' || $value === '') continue;
+                $clean[] = [
+                    'label' => mb_substr(sanitize($label), 0, 80),
+                    'value' => mb_substr(sanitize($value), 0, 300),
+                ];
+            }
+            $update['specs'] = $clean ? json_encode($clean, JSON_UNESCAPED_UNICODE) : null;
         }
         $this->products->update($id, $update);
         success($this->products->findById($id), 'Product updated.');

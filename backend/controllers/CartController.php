@@ -4,10 +4,12 @@ declare(strict_types=1);
 class CartController
 {
     private CartModel $carts;
+    private StockReservationModel $reservations;
 
     public function __construct()
     {
-        $this->carts = new CartModel();
+        $this->carts        = new CartModel();
+        $this->reservations = new StockReservationModel();
     }
 
     private function getCart(): array
@@ -24,7 +26,16 @@ class CartController
         $cart  = $this->getCart();
         $items = $this->carts->items((int) $cart['id']);
         $total = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
-        success(['cart_id' => $cart['id'], 'items' => $items, 'total' => round($total, 2)]);
+        // Evaluate cart-wide promotions (BOGO + free gift) so the frontend can
+        // show savings + auto-added gifts BEFORE checkout. The same engine
+        // runs again at checkout so the totals stay in sync.
+        $promotions = (new PromotionModel())->evaluate($items);
+        success([
+            'cart_id'    => $cart['id'],
+            'items'      => $items,
+            'total'      => round($total, 2),
+            'promotions' => $promotions,
+        ]);
     }
 
     public function addItem(): never
@@ -62,9 +73,16 @@ class CartController
             $allVariants = $products->variants($productId);
             $variant     = current(array_filter($allVariants, fn($v) => $v['id'] == $variantId)) ?: null;
             if (!$variant) error('Variant not found.', 404);
-            $inCart   = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
-            $totalQty = $inCart + $qty;
-            if ((int) $variant['stock_qty'] < $totalQty) error('Not enough stock.', 422);
+            $inCart    = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
+            $totalQty  = $inCart + $qty;
+            // Subtract OTHER carts' active holds on this variant so two shoppers
+            // can't both add the last unit. Caller's cart is excluded so adding
+            // more to your own cart counts against the same pool.
+            $available = (int) $variant['stock_qty'] - $this->reservations->heldForVariant($variantId, (int) $cart['id']);
+            if ($available < $totalQty) {
+                $left = max(0, $available - $inCart);
+                error($left > 0 ? "Only {$left} left in stock." : 'Out of stock.', 422);
+            }
             $price += (float) $variant['price_modifier'];
         } elseif (!empty($selectedOptionIds)) {
             // Each picked filter option has its OWN independent stock pool.
@@ -82,12 +100,20 @@ class CartController
                 }
             }
         } else {
-            $inCart   = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
-            $totalQty = $inCart + $qty;
-            if ((int) $product['stock_qty'] < $totalQty) error('Not enough stock.', 422);
+            $inCart    = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
+            $totalQty  = $inCart + $qty;
+            $available = (int) $product['stock_qty'] - $this->reservations->heldForProduct($productId, (int) $cart['id']);
+            if ($available < $totalQty) {
+                $left = max(0, $available - $inCart);
+                error($left > 0 ? "Only {$left} left in stock." : 'Out of stock.', 422);
+            }
         }
 
         $this->carts->addItem((int) $cart['id'], $productId, $variantId, $qty, $price, $selectedOptionIds);
+        // Hold the new total qty for 15 min — other carts see less available stock.
+        $newTotal = $this->carts->getItemQuantity((int) $cart['id'], $productId, $variantId);
+        $this->reservations->reserve((int) $cart['id'], $productId, $variantId, $newTotal);
+
         $items = $this->carts->items((int) $cart['id']);
         $total = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
         success(['cart_id' => $cart['id'], 'items' => $items, 'total' => round($total, 2)], 'Item added to cart.', 201);
@@ -185,7 +211,14 @@ class CartController
         if ($item['variant_id']) {
             $allVariants = $products->variants((int) $item['product_id']);
             $variant     = current(array_filter($allVariants, fn($v) => $v['id'] == $item['variant_id'])) ?: null;
-            if ($variant && (int) $variant['stock_qty'] < $qty) error('Not enough stock.', 422);
+            if ($variant) {
+                // Available = raw stock - other carts' holds on this variant.
+                $available = (int) $variant['stock_qty']
+                    - $this->reservations->heldForVariant((int) $item['variant_id'], (int) $cart['id']);
+                if ($available < $qty) {
+                    error($available > 0 ? "Only {$available} left in stock." : 'Out of stock.', 422);
+                }
+            }
         } else {
             $itemOptionIds = $this->carts->itemOptionIds($itemId);
             if (!empty($itemOptionIds)) {
@@ -204,14 +237,22 @@ class CartController
                         error("Only {$remaining} left for the selected option.", 422);
                     }
                 }
-            } elseif ((int) $product['stock_qty'] < $qty) {
-                error('Not enough stock.', 422);
+            } else {
+                $available = (int) $product['stock_qty']
+                    - $this->reservations->heldForProduct((int) $item['product_id'], (int) $cart['id']);
+                if ($available < $qty) {
+                    error($available > 0 ? "Only {$available} left in stock." : 'Out of stock.', 422);
+                }
             }
         }
 
         if (!$this->carts->updateItem($itemId, (int) $cart['id'], $qty)) {
             error('Item not found in cart.', 404);
         }
+        // Refresh the reservation TTL + new qty for this SKU.
+        $variantId = $item['variant_id'] !== null ? (int) $item['variant_id'] : null;
+        $this->reservations->reserve((int) $cart['id'], (int) $item['product_id'], $variantId, $qty);
+
         $items = $this->carts->items((int) $cart['id']);
         $total = array_sum(array_map(fn($i) => $i['price_snapshot'] * $i['quantity'], $items));
         success(['cart_id' => $cart['id'], 'items' => $items, 'total' => round($total, 2)], 'Cart updated.');
@@ -221,8 +262,14 @@ class CartController
     {
         method('DELETE');
         $cart = $this->getCart();
+        // Capture the SKU before deleting the row so we can drop its hold.
+        $item = $this->carts->findItem($itemId, (int) $cart['id']);
         if (!$this->carts->removeItem($itemId, (int) $cart['id'])) {
             error('Item not found.', 404);
+        }
+        if ($item) {
+            $variantId = $item['variant_id'] !== null ? (int) $item['variant_id'] : null;
+            $this->reservations->release((int) $cart['id'], (int) $item['product_id'], $variantId);
         }
         success(null, 'Item removed.');
     }
@@ -294,6 +341,7 @@ class CartController
         method('DELETE');
         $cart = $this->getCart();
         $this->carts->clear((int) $cart['id']);
+        $this->reservations->releaseCart((int) $cart['id']);
         success(null, 'Cart cleared.');
     }
 

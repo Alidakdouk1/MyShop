@@ -165,4 +165,177 @@ class NewsletterController
         $this->savePopupSettings(getBody());
         success($this->popupSettings(), 'Welcome popup saved.');
     }
+
+    // ── Campaigns (one-off email blasts) ─────────────────────────────────────
+
+    private function guardAdmin(): array
+    {
+        $auth = AuthMiddleware::require();
+        RoleMiddleware::require($auth, 'admin');
+        return $auth;
+    }
+
+    /** Whitelisted HTML so admins can use light formatting without XSS risk. */
+    private function sanitizeBody(string $raw): string
+    {
+        $allowed = '<p><br><strong><b><em><i><u><a><ul><ol><li><h1><h2><h3><img><blockquote>';
+        $clean   = strip_tags($raw, $allowed);
+        // Strip inline event handlers and javascript: URLs.
+        $clean = preg_replace('/on\w+\s*=\s*"[^"]*"/i', '', $clean);
+        $clean = preg_replace('/on\w+\s*=\s*\'[^\']*\'/i', '', $clean);
+        $clean = preg_replace('/javascript\s*:/i', '', $clean);
+        return $clean;
+    }
+
+    public function adminCampaignsIndex(): never
+    {
+        method('GET');
+        $this->guardAdmin();
+        $rows = getDB()->query(
+            "SELECT id, subject, status, recipient_count, sent_count, failed_count,
+                    sent_at, created_at
+             FROM newsletter_campaigns ORDER BY id DESC LIMIT 100"
+        )->fetchAll();
+        $subCount = (int) getDB()->query("SELECT COUNT(*) FROM newsletter_subscribers WHERE is_active = 1")->fetchColumn();
+        success(['campaigns' => $rows, 'subscriber_count' => $subCount]);
+    }
+
+    public function adminCampaignShow(int $id): never
+    {
+        method('GET');
+        $this->guardAdmin();
+        $row = getDB()->prepare("SELECT * FROM newsletter_campaigns WHERE id = ?");
+        $row->execute([$id]);
+        $r = $row->fetch();
+        if (!$r) error('Campaign not found.', 404);
+        success($r);
+    }
+
+    public function adminCampaignStore(): never
+    {
+        method('POST');
+        $this->guardAdmin();
+        $d = getBody();
+        $subject = trim(sanitize((string) ($d['subject'] ?? '')));
+        $bodyRaw = (string) ($d['body'] ?? '');
+        if ($subject === '')          error('Subject is required.', 422);
+        if (trim($bodyRaw) === '')    error('Body is required.', 422);
+
+        $stmt = getDB()->prepare(
+            "INSERT INTO newsletter_campaigns (subject, body, cta_text, cta_url, status)
+             VALUES (?, ?, ?, ?, 'draft')"
+        );
+        $stmt->execute([
+            mb_substr($subject, 0, 200),
+            $this->sanitizeBody($bodyRaw),
+            !empty($d['cta_text']) ? mb_substr(sanitize((string) $d['cta_text']), 0, 80) : null,
+            !empty($d['cta_url'])  ? mb_substr(trim((string) $d['cta_url']), 0, 500)     : null,
+        ]);
+        $id = (int) getDB()->lastInsertId();
+        $row = getDB()->prepare("SELECT * FROM newsletter_campaigns WHERE id = ?");
+        $row->execute([$id]);
+        success($row->fetch(), 'Draft saved.', 201);
+    }
+
+    public function adminCampaignUpdate(int $id): never
+    {
+        method('PUT');
+        $this->guardAdmin();
+        $check = getDB()->prepare("SELECT status FROM newsletter_campaigns WHERE id = ?");
+        $check->execute([$id]);
+        $row = $check->fetch();
+        if (!$row)                       error('Campaign not found.', 404);
+        if ($row['status'] !== 'draft')  error('Only drafts can be edited.', 409);
+
+        $d = getBody();
+        $sets = []; $params = [];
+        if (array_key_exists('subject', $d))  { $sets[] = 'subject = ?';  $params[] = mb_substr(sanitize((string) $d['subject']), 0, 200); }
+        if (array_key_exists('body', $d))     { $sets[] = 'body = ?';     $params[] = $this->sanitizeBody((string) $d['body']); }
+        if (array_key_exists('cta_text', $d)) { $sets[] = 'cta_text = ?'; $params[] = !empty($d['cta_text']) ? mb_substr(sanitize((string) $d['cta_text']), 0, 80) : null; }
+        if (array_key_exists('cta_url', $d))  { $sets[] = 'cta_url = ?';  $params[] = !empty($d['cta_url'])  ? mb_substr(trim((string) $d['cta_url']), 0, 500)     : null; }
+        if (!$sets) error('Nothing to update.', 422);
+
+        $params[] = $id;
+        getDB()->prepare("UPDATE newsletter_campaigns SET " . implode(', ', $sets) . " WHERE id = ?")
+            ->execute($params);
+        $row = getDB()->prepare("SELECT * FROM newsletter_campaigns WHERE id = ?");
+        $row->execute([$id]);
+        success($row->fetch(), 'Campaign updated.');
+    }
+
+    public function adminCampaignDestroy(int $id): never
+    {
+        method('DELETE');
+        $this->guardAdmin();
+        $check = getDB()->prepare("SELECT status FROM newsletter_campaigns WHERE id = ?");
+        $check->execute([$id]);
+        $row = $check->fetch();
+        if (!$row)                       error('Campaign not found.', 404);
+        if ($row['status'] !== 'draft')  error('Only drafts can be deleted.', 409);
+        getDB()->prepare("DELETE FROM newsletter_campaigns WHERE id = ?")->execute([$id]);
+        success(null, 'Campaign deleted.');
+    }
+
+    /**
+     * Sends the campaign synchronously to every active subscriber.
+     * Each send is wrapped so a single failure doesn't abort the batch.
+     * Status flow: draft → sending → sent (or failed if zero went out).
+     */
+    public function adminCampaignSend(int $id): never
+    {
+        method('POST');
+        $this->guardAdmin();
+        $row = getDB()->prepare("SELECT * FROM newsletter_campaigns WHERE id = ?");
+        $row->execute([$id]);
+        $c = $row->fetch();
+        if (!$c)                       error('Campaign not found.', 404);
+        if ($c['status'] !== 'draft')  error('Campaign already sent or in progress.', 409);
+
+        $recipients = getDB()->query("SELECT email FROM newsletter_subscribers WHERE is_active = 1")->fetchAll();
+        $total = count($recipients);
+        if ($total === 0) error('No active subscribers to send to.', 422);
+
+        // Flip to "sending" so a parallel hit can't double-send.
+        getDB()->prepare("UPDATE newsletter_campaigns SET status = 'sending', recipient_count = ? WHERE id = ?")
+            ->execute([$total, $id]);
+
+        // Bump PHP's wall-clock budget for large lists. mail()/SMTP can be slow;
+        // give ourselves up to 5 minutes here. Hostinger typically allows this.
+        @set_time_limit(300);
+
+        $sent = 0; $failed = 0;
+        foreach ($recipients as $r) {
+            $ok = MailHelper::newsletterCampaign(
+                (string) $r['email'],
+                (string) $c['subject'],
+                (string) $c['body'],
+                $c['cta_text'] ?: null,
+                $c['cta_url']  ?: null,
+            );
+            $ok ? $sent++ : $failed++;
+        }
+
+        // If mail is disabled in dev, MailHelper::send() returns false silently.
+        // We still mark the campaign 'sent' so the admin can see the recipient
+        // count was processed; the UI will note the mail-disabled state.
+        $mailEnabled = env('MAIL_ENABLED', 'false') === 'true';
+        $finalStatus = ($mailEnabled && $sent === 0) ? 'failed' : 'sent';
+
+        getDB()->prepare(
+            "UPDATE newsletter_campaigns
+             SET status = ?, sent_count = ?, failed_count = ?, sent_at = NOW()
+             WHERE id = ?"
+        )->execute([$finalStatus, $sent, $failed, $id]);
+
+        success([
+            'sent'         => $sent,
+            'failed'       => $failed,
+            'total'        => $total,
+            'mail_enabled' => $mailEnabled,
+            'status'       => $finalStatus,
+        ], $mailEnabled
+            ? "Sent {$sent} of {$total} email" . ($total === 1 ? '' : 's') . "."
+            : 'Recorded — but MAIL_ENABLED is false, so no emails were actually sent.'
+        );
+    }
 }

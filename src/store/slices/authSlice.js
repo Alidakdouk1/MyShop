@@ -33,7 +33,19 @@ export const googleLoginThunk = createAsyncThunk('auth/googleLogin', async (cred
   }
 })
 
+// Page-load auth probe. Try refresh-token first so that:
+//   • Anonymous visitors hit exactly one 401 (the refresh endpoint) instead of
+//     a chain of /me → 401 → refresh → 401 → retried /me → 401.
+//   • Returning visitors with a valid refresh cookie mint a new access token
+//     before /me is called, so /me always sees a Bearer header and returns 200.
 export const getMeThunk = createAsyncThunk('auth/me', async (_, { rejectWithValue }) => {
+  try {
+    const { data: refresh } = await authApi.refreshToken()
+    window.__accessToken = refresh.data.access_token
+  } catch {
+    // No valid refresh cookie — visitor is anonymous. Don't even try /me.
+    return rejectWithValue(null)
+  }
   try {
     const { data } = await authApi.getMe()
     return data.data
@@ -55,6 +67,9 @@ const authSlice = createSlice({
       .addCase(loginThunk.pending,    s => { s.loading = true; s.error = null })
       .addCase(loginThunk.fulfilled,  (s, a) => {
         s.loading = false
+        // 2FA-required responses carry no user/token — keep state untouched
+        // so the user remains logged-out until /2fa/verify-login succeeds.
+        if (a.payload?.two_factor_required) return
         s.user = a.payload.user
         window.__accessToken = a.payload.access_token
       })

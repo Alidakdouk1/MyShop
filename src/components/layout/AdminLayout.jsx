@@ -37,6 +37,22 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/reels', label: 'Reels',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M4 4h12v12H4V4zm5 3v6l5-3-5-3z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/marketplace', label: 'Marketplace',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M3 3h14l-1 5H4L3 3zm1 7h12v7H4v-7zm3 2v3h6v-3H7z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/low-stock', label: 'Low Stock',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -77,6 +93,14 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/whatsapp-notifications', label: 'WhatsApp Alerts',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+        <path d="M17.5 14.4c-.3-.1-1.7-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-1 1.2-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.4-1.5-.9-.8-1.5-1.8-1.6-2.1-.2-.3 0-.4.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4s-1 1-1 2.5 1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.2-.6-.3M12 22h-.1c-1.7 0-3.5-.5-5-1.4l-.4-.2L2.8 21l1-3.7-.2-.4c-1-1.6-1.5-3.4-1.5-5.3C2.1 6.2 6.6 1.7 12.1 1.7c2.6 0 5.1 1 7 2.9 1.9 1.9 2.9 4.4 2.9 6.9 0 5.5-4.5 10-9.9 10M19 5C17.2 3.1 14.7 2 12.1 2 6.5 2 1.9 6.6 1.9 12.2c0 2.1.5 4.1 1.6 5.9L1.8 24l6.3-1.7c1.7.9 3.6 1.4 5.6 1.4h.1c5.6 0 10.1-4.6 10.1-10.2 0-2.7-1.1-5.2-3-7.1Z"/>
+      </svg>
+    ),
+  },
+  {
     to: '/admin/whish', label: 'Whish Money',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -93,6 +117,14 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/shipping-estimate', label: 'Shipping ETA',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M8 16.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM15 16.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM3 4a1 1 0 011-1h9a1 1 0 011 1v3h2.382a1 1 0 01.894.553l1.382 2.764A1 1 0 0119 11v3a1 1 0 01-1 1h-.05a2.5 2.5 0 00-4.9 0h-3.1a2.5 2.5 0 00-4.9 0H4a1 1 0 01-1-1V4zm12 5h2.382L15.382 7H15v2z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/orders', label: 'Orders',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -102,10 +134,26 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/abandoned-carts', label: 'Cart Recovery',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/chat', label: 'Chat',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
         <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.84 8.84 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zm-4 0H9v2h2V9z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/testimonials', label: 'Testimonials',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM6 8a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H7a1 1 0 01-1-1z" clipRule="evenodd" />
       </svg>
     ),
   },
@@ -142,6 +190,15 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/promotions', label: 'Promotions',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M5 5a3 3 0 015-2.236A3 3 0 0114.83 6H16a2 2 0 110 4h-5V9a1 1 0 10-2 0v1H4a2 2 0 110-4h1.17C5.06 5.687 5 5.35 5 5zm4 1V5a1 1 0 10-1 1h1zm3 0a1 1 0 10-1-1v1h1z" clipRule="evenodd" />
+        <path d="M9 11H3v5a2 2 0 002 2h4v-7zM11 18h4a2 2 0 002-2v-5h-6v7z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/flash-sales', label: 'Flash Sales',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -166,6 +223,15 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/newsletter-campaigns', label: 'Email Campaigns',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+        <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/newsletter-popup', label: 'Welcome Popup',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -175,10 +241,26 @@ const NAV = [
     ),
   },
   {
+    to: '/admin/sales-banner', label: 'Sales Banner',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm2 1h12v6H4V7zm3 2h2v2H7V9zm4 0h2v2h-2V9z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/activity', label: 'Activity Ticker',
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .2.08.4.22.53l3 3a.75.75 0 101.06-1.06l-2.78-2.78V5z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/seo-tools', label: 'SEO Tools',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
       </svg>
     ),
   },

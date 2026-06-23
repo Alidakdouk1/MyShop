@@ -293,7 +293,15 @@ export default function AdminDashboard() {
               <h2 className="font-bold text-base" style={{ color: '#0F0F0F' }}>Abandoned Carts</h2>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#FEF2F2', color: '#C0392B' }}>{abandoned.count}</span>
             </div>
-            <span className="text-sm font-bold" style={{ color: '#16A34A' }}>${Number(abandoned.total_value).toFixed(2)} recoverable</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold" style={{ color: '#16A34A' }}>${Number(abandoned.total_value).toFixed(2)} recoverable</span>
+              <Link
+                to="/admin/abandoned-carts"
+                className="text-xs font-bold uppercase tracking-wider text-ink-tertiary hover:text-ink transition-colors"
+              >
+                Recover →
+              </Link>
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             {abandoned.carts.slice(0, 6).map(c => (

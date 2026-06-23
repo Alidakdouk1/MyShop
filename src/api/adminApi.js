@@ -4,6 +4,25 @@ import api from './axios'
 export const getAdminDashboard  = ()          => api.get('/admin/dashboard')
 export const getAbandonedCarts  = (hours)     => api.get('/admin/abandoned-carts', { params: hours ? { hours } : {} })
 export const getLowStock        = ()          => api.get('/admin/low-stock')
+
+// WhatsApp order notifications
+export const getWhatsAppNotifySettings    = ()  => api.get('/admin/whatsapp-notifications')
+export const updateWhatsAppNotifySettings = (s) => api.put('/admin/whatsapp-notifications', s)
+
+// SEO tools
+export const getSeoStats          = ()         => api.get('/admin/seo/stats')
+
+// Promotions (Buy X Get Y + Free Gift)
+export const getAdminPromotions   = ()         => api.get('/admin/promotions')
+export const createAdminPromotion = (data)     => api.post('/admin/promotions', data)
+export const updateAdminPromotion = (id, data) => api.put(`/admin/promotions/${id}`, data)
+export const deleteAdminPromotion = (id)       => api.delete(`/admin/promotions/${id}`)
+
+// Abandoned cart recovery
+export const getAbandonedCartSettings    = ()       => api.get('/admin/abandoned-cart/settings')
+export const updateAbandonedCartSettings = (data)   => api.put('/admin/abandoned-cart/settings', data)
+export const getAbandonedCartPending     = ()       => api.get('/admin/abandoned-cart/pending')
+export const sendAbandonedCartRecovery   = (cartId) => api.post(`/admin/abandoned-cart/${cartId}/send`)
 export const getAnalytics       = (days = 30) => api.get('/admin/analytics', { params: { days } })
 
 // Users
@@ -12,6 +31,14 @@ export const createAdminUser   = (data)       => api.post('/admin/users', data)
 export const updateAdminUser   = (id, data)   => api.put(`/admin/users/${id}`, data)
 export const deleteAdminUser   = (id)         => api.delete(`/admin/users/${id}`)
 export const updateUserRole    = (id, role)   => api.put(`/admin/users/${id}/role`, { role })
+export const getUserDetail     = (id)         => api.get(`/admin/users/${id}`)
+export const setUserVipLevel   = (id, level)  => api.put(`/admin/users/${id}/vip`, { vip_level: level })
+
+// Customer notes (admin)
+export const getUserNotes      = (userId)       => api.get(`/admin/users/${userId}/notes`)
+export const addUserNote       = (userId, data) => api.post(`/admin/users/${userId}/notes`, data)
+export const updateUserNote    = (id, data)     => api.put(`/admin/notes/${id}`, data)
+export const deleteUserNote    = (id)           => api.delete(`/admin/notes/${id}`)
 
 // Admins
 export const getAdmins         = (params)     => api.get('/admin/admins', { params })
@@ -22,7 +49,9 @@ export const deleteAdmin       = (id)         => api.delete(`/admin/admins/${id}
 // Orders
 export const getAdminOrders    = (params)     => api.get('/admin/orders', { params })
 export const updateOrderStatus = (id, status) => api.put(`/admin/orders/${id}/status`, { status })
+export const updateOrderTracking = (id, data) => api.put(`/admin/orders/${id}/tracking`, data)
 export const getOrderStats     = ()           => api.get('/admin/orders/stats')
+export const bulkUpdateOrders  = (payload)    => api.post('/admin/orders/bulk', payload)
 
 // Reviews
 export const getAdminReviews    = (params)    => api.get('/admin/reviews', { params })
@@ -46,7 +75,7 @@ export const adminDeleteVariant     = (id, vid)      => api.delete(`/admin/produ
 export const exportProductsCsv      = ()             => api.get('/admin/products/export', { responseType: 'blob' })
 export const importProductsCsv      = (formData)     => api.post('/admin/products/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const getProductStats        = ()             => api.get('/admin/products/stats')
-export const bulkProductAction      = (ids, action)  => api.post('/admin/products/bulk', { ids, action })
+export const bulkProductAction      = (ids, action, extra = {})  => api.post('/admin/products/bulk', { ids, action, ...extra })
 
 // Categories
 export const getAdminCategories    = ()           => api.get('/admin/categories')

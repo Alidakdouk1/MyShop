@@ -6,6 +6,7 @@ import { selectUser, selectAuthInitialized } from '../../store/slices/authSlice'
 import Input from '../../components/ui/Input'
 import Button from '../../components/ui/Button'
 import GoogleSignInButton from '../../components/auth/GoogleSignInButton'
+import Logo from '../../components/brand/Logo'
 
 /* ── decorative left panel ─────────────────────────────────────────── */
 function LeftPanel() {
@@ -47,16 +48,7 @@ function LeftPanel() {
 
       {/* top-left mark */}
       <div style={{ padding: '2.5rem 2.5rem 0', position: 'relative', zIndex: 1 }}>
-        <span
-          style={{
-            fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: '1.25rem',
-            letterSpacing: '0.18em',
-            color: '#FAFAF8',
-          }}
-        >
-          MY<span style={{ color: '#C0392B' }}>SHOP</span>
-        </span>
+        <Logo variant="dark" size={28} />
       </div>
 
       {/* centre type composition */}
@@ -157,7 +149,7 @@ function LeftPanel() {
 
 /* ── main page ─────────────────────────────────────────────────────── */
 export default function Login() {
-  const { login, error, clearError } = useAuth()
+  const { login, verifyTwoFactor, error, clearError } = useAuth()
   const navigate     = useNavigate()
   const location     = useLocation()
   const user         = useSelector(selectUser)
@@ -166,6 +158,10 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPass, setShowPass] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // 2FA challenge state — set after password ok when 2FA is enabled
+  const [twoFA, setTwoFA] = useState(null) // { challenge } or null
+  const [code,  setCode]  = useState('')
+  const [codeErr, setCodeErr] = useState('')
 
   useEffect(() => clearError, [])
 
@@ -174,9 +170,27 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
-    const loggedInUser = await login(form)
+    const result = await login(form)
     setSubmitting(false)
-    if (loggedInUser) navigate(loggedInUser.role === 'admin' ? '/admin' : from, { replace: true })
+    if (!result) return
+    if (result.twoFactorRequired) {
+      setTwoFA({ challenge: result.challenge })
+      return
+    }
+    navigate(result.role === 'admin' ? '/admin' : from, { replace: true })
+  }
+
+  const handleVerify = async (e) => {
+    e.preventDefault()
+    if (!/^\d{6}$|^[A-Za-z0-9]{5}-?[A-Za-z0-9]{5}$/.test(code.trim())) {
+      setCodeErr('Enter a 6-digit code or a backup code'); return
+    }
+    setSubmitting(true)
+    setCodeErr('')
+    const result = await verifyTwoFactor(twoFA.challenge, code.trim())
+    setSubmitting(false)
+    if (result?.error) { setCodeErr(result.error); return }
+    if (result) navigate(result.role === 'admin' ? '/admin' : from, { replace: true })
   }
 
   // Redirect already-authenticated users away from /login
@@ -203,17 +217,8 @@ export default function Login() {
       >
         {/* mobile-only logo */}
         <div className="lg:hidden mb-10 text-center">
-          <Link
-            to="/"
-            style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: '2rem',
-              letterSpacing: '0.1em',
-              color: '#0F0F0F',
-              textDecoration: 'none',
-            }}
-          >
-            MY<span style={{ color: '#C0392B' }}>SHOP</span>
+          <Link to="/" aria-label="Pick&Go LB" style={{ textDecoration: 'none' }}>
+            <Logo variant="light" size={44} />
           </Link>
         </div>
 
@@ -289,6 +294,55 @@ export default function Login() {
             </div>
           )}
 
+          {twoFA ? (
+            <form onSubmit={handleVerify} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{
+                background: '#FAFAF8', border: '1px solid #E4E1D9',
+                borderRadius: 12, padding: '14px 16px',
+              }}>
+                <p style={{ fontSize: '0.85rem', color: '#0F0F0F', fontWeight: 600, margin: 0 }}>
+                  Two-factor authentication
+                </p>
+                <p style={{ fontSize: '0.75rem', color: '#5C5854', margin: '4px 0 0', lineHeight: 1.5 }}>
+                  Open your authenticator app and enter the 6-digit code for <strong>{form.email}</strong>.
+                  Lost access? Enter one of your backup codes instead.
+                </p>
+              </div>
+              <Input
+                label="6-digit code"
+                value={code}
+                onChange={e => { setCode(e.target.value); setCodeErr('') }}
+                placeholder="123456 or backup code"
+                autoFocus
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                error={codeErr}
+              />
+              <button
+                type="submit"
+                disabled={submitting}
+                style={{
+                  width: '100%', height: 52,
+                  background: submitting ? '#2D2D2D' : '#0F0F0F',
+                  color: '#FAFAF8', border: 'none', borderRadius: 6,
+                  fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.18em',
+                  textTransform: 'uppercase', cursor: submitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {submitting ? 'Verifying…' : 'Verify & continue'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTwoFA(null); setCode(''); setCodeErr('') }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '0.75rem', color: '#9C9894', textAlign: 'center',
+                }}
+              >
+                Use a different account
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="stagger-1 animate-fade-in">
               <Input
@@ -421,9 +475,12 @@ export default function Login() {
               </button>
             </div>
           </form>
+          )}
 
-          <GoogleSignInButton redirectTo={from} />
+          {!twoFA && <GoogleSignInButton redirectTo={from} />}
 
+          {!twoFA && (
+          <>
           {/* divider */}
           <div
             className="stagger-5 animate-fade-in"
@@ -491,6 +548,8 @@ export default function Login() {
             {' '}and{' '}
             <Link to="#" style={{ color: '#5C5854', textDecoration: 'underline' }}>Privacy Policy</Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>

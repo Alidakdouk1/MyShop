@@ -1,32 +1,71 @@
 import { useSelector, useDispatch } from 'react-redux'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  selectCartItems, selectCartTotal,
+  selectCartItems, selectCartTotal, selectCartPromotions,
   updateCartItemThunk, removeCartItemThunk, clearCartThunk,
+  addToCartThunk,
 } from '../store/slices/cartSlice'
+import {
+  toggleWishlistThunk, selectWishlistItems,
+} from '../store/slices/wishlistSlice'
 import { selectUser } from '../store/slices/authSlice'
+import { useToast } from '../hooks/useToast'
 import { useCurrency } from '../context/CurrencyContext'
 import { resolveImg } from '../lib/img'
 import { waLink, cartWhatsAppMessage, whatsappEnabled } from '../lib/whatsapp'
 import Button from '../components/ui/Button'
+import EmptyState from '../components/common/EmptyState'
+import Reveal from '../components/common/Reveal'
 import FreeShippingNudge from '../components/cart/FreeShippingNudge'
 import CartRecommendations from '../components/cart/CartRecommendations'
+import RecentlyViewedRow from '../components/product/RecentlyViewedRow'
 
 export default function Cart() {
   const dispatch  = useDispatch()
   const navigate  = useNavigate()
+  const toast     = useToast()
   const user      = useSelector(selectUser)
   const items     = useSelector(selectCartItems)
-  const total     = useSelector(selectCartTotal)
+  const subtotal  = useSelector(selectCartTotal)
+  const promotions = useSelector(selectCartPromotions)
+  const wishlist  = useSelector(selectWishlistItems)
   const { format } = useCurrency()
+  const promoSavings = Number(promotions?.savings_total || 0)
+  const total = Math.max(0, subtotal - promoSavings)
+
+  // Save the item to wishlist, then drop it from cart. Bail on failure so we
+  // don't leave the user with the row gone AND no wishlist save.
+  const saveForLater = async (item) => {
+    const alreadyWished = wishlist.some(w => Number(w.product_id) === Number(item.product_id))
+    if (!alreadyWished) {
+      const r = await dispatch(toggleWishlistThunk({ productId: item.product_id, wishlistItemId: null }))
+      if (r.error) { toast.error('Could not save — try again.'); return }
+    }
+    await dispatch(removeCartItemThunk(item.id))
+    toast.success(alreadyWished ? 'Moved to your wishlist.' : 'Saved for later.')
+  }
+
+  // Bring a saved item back to the cart. Add first, then remove from wishlist
+  // (same order as saveForLater so a failure leaves the item somewhere safe).
+  const moveToCart = async (wishItem) => {
+    const r = await dispatch(addToCartThunk({ product_id: wishItem.product_id, quantity: 1 }))
+    if (r.error) { toast.error(r.payload || 'Could not move to cart.'); return }
+    await dispatch(toggleWishlistThunk({ productId: wishItem.product_id, wishlistItemId: wishItem.id }))
+    toast.success('Moved back to cart.')
+  }
 
   if (items.length === 0) return (
-    <div className="max-w-screen-xl mx-auto px-4 py-20 text-center">
-      <div className="text-7xl mb-6">🛒</div>
-      <h1 className="hero-display text-5xl text-ink mb-3">YOUR CART IS EMPTY</h1>
-      <p className="text-ink-secondary mb-8">Looks like you haven&apos;t added anything yet.</p>
-      <Button onClick={() => navigate('/shop')} size="lg">Browse Products</Button>
-    </div>
+    <>
+      <div className="max-w-screen-xl mx-auto px-4 py-12">
+        <EmptyState
+          title="Your cart is waiting"
+          description="Nothing here yet. Browse today's top deals or pick up a product you've been eyeing."
+          primary={{   label: "Browse Top Deals",  to: "/shop?on_sale=1" }}
+          secondary={{ label: "Shop all products", to: "/shop" }}
+        />
+      </div>
+      <RecentlyViewedRow title="Pick Up Where You Left Off" eyebrow="Last seen" />
+    </>
   )
 
   return (
@@ -73,10 +112,23 @@ export default function Cart() {
                         className="w-9 h-9 flex items-center justify-center hover:bg-surface-alt transition-colors"
                       >+</button>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <span className="font-bold text-ink">{format(parseFloat(item.price) * item.quantity)}</span>
+                      {user && (
+                        <button
+                          onClick={() => saveForLater(item)}
+                          aria-label="Save for later"
+                          title="Save for later"
+                          className="text-ink-tertiary hover:text-ink transition-colors"
+                        >
+                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                          </svg>
+                        </button>
+                      )}
                       <button
                         onClick={() => dispatch(removeCartItemThunk(item.id))}
+                        aria-label="Remove from cart"
                         className="text-ink-tertiary hover:text-accent transition-colors"
                       >
                         <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,6 +149,55 @@ export default function Cart() {
           >
             Clear cart
           </button>
+
+          {/* Saved for later — wishlist items rendered as a slim strip directly
+              under the active cart so customers can move them back with one tap. */}
+          {user && wishlist.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-border">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
+                  Saved for later · {wishlist.length}
+                </p>
+                <Link to="/account/wishlist" className="text-xs font-semibold text-ink-tertiary hover:text-ink underline underline-offset-2">
+                  View all
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {wishlist.slice(0, 6).map(w => {
+                  const wImg = w.image
+                    ? resolveImg(w.image)
+                    : `https://placehold.co/200/F2F0EB/9C9894?text=P`
+                  const wPrice = Number(w.sale_price || w.base_price || 0)
+                  const wOut   = Number(w.stock_qty ?? 1) <= 0
+                  return (
+                    <div key={w.id} className="rounded-xl border border-border bg-surface overflow-hidden">
+                      <Link to={`/products/${w.slug}`} className="block aspect-square bg-surface-alt">
+                        <img src={wImg} alt={w.name} className="w-full h-full object-cover" />
+                      </Link>
+                      <div className="p-2.5">
+                        <Link to={`/products/${w.slug}`}>
+                          <p className="text-xs font-semibold text-ink line-clamp-2 leading-snug">{w.name}</p>
+                        </Link>
+                        <p className="text-sm font-bold text-ink mt-1">{format(wPrice)}</p>
+                        <button
+                          type="button"
+                          onClick={() => moveToCart(w)}
+                          disabled={wOut}
+                          className={`mt-2 w-full text-[11px] font-bold uppercase tracking-wider py-1.5 rounded-md transition-colors ${
+                            wOut
+                              ? 'bg-surface-alt text-ink-tertiary cursor-not-allowed'
+                              : 'bg-ink text-white hover:bg-ink/85'
+                          }`}
+                        >
+                          {wOut ? 'Out of stock' : 'Move to cart'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Order summary */}
@@ -104,8 +205,36 @@ export default function Cart() {
           <div className="bg-surface border border-border rounded-2xl p-6 sticky top-24">
             <h2 className="font-bold text-ink text-lg mb-4">Order Summary</h2>
             <div className="mb-4"><FreeShippingNudge total={total} /></div>
+
+            {/* Active promotions — banners + free-gift cards rendered before the totals */}
+            {promotions?.adjustments?.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {promotions.adjustments.map((a, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl p-3 flex items-start gap-2.5 text-sm"
+                    style={{
+                      background: a.type === 'gift' ? '#FEF3C7' : '#DCFCE7',
+                      border:     a.type === 'gift' ? '1px solid #FDE68A' : '1px solid #BBF7D0',
+                    }}
+                  >
+                    <span className="text-base leading-none">{a.type === 'gift' ? '🎁' : '🎉'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-ink leading-tight">{a.name}</p>
+                      <p className="text-xs leading-snug mt-0.5" style={{ color: a.type === 'gift' ? '#92400E' : '#15803D' }}>
+                        {a.detail}{a.savings > 0 ? ` · you save ${format(a.savings)}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="space-y-3 mb-5">
-              <Row label="Subtotal" value={format(total)} />
+              <Row label="Subtotal" value={format(subtotal)} />
+              {promoSavings > 0 && (
+                <Row label="Promotions" value={`-${format(promoSavings)}`} accent />
+              )}
               <Row label="Shipping" value="Calculated at checkout" small />
               <Row label="Taxes"    value="Calculated at checkout" small />
               <div className="border-t border-border pt-3">
@@ -113,12 +242,12 @@ export default function Cart() {
               </div>
             </div>
             {user ? (
-              <Button onClick={() => navigate('/checkout')} size="lg" className="w-full">
+              <Button onClick={() => navigate('/checkout')} size="lg" className="w-full cta-glow">
                 Proceed to Checkout
               </Button>
             ) : (
               <div className="space-y-2">
-                <Button onClick={() => navigate('/login')} size="lg" className="w-full">
+                <Button onClick={() => navigate('/login')} size="lg" className="w-full cta-glow">
                   Login to Checkout
                 </Button>
                 <p className="text-xs text-center text-ink-tertiary">
@@ -148,16 +277,23 @@ export default function Cart() {
       </div>
 
       {/* Cross-sell rail */}
-      <CartRecommendations variant="page" />
+      <Reveal>
+        <CartRecommendations variant="page" />
+      </Reveal>
+
+      {/* Recently viewed — compact, tucked below cross-sell so it doesn't compete */}
+      <Reveal delay={0.05}>
+        <RecentlyViewedRow variant="compact" minToShow={3} />
+      </Reveal>
     </div>
   )
 }
 
-function Row({ label, value, small, bold }) {
+function Row({ label, value, small, bold, accent }) {
   return (
     <div className="flex items-center justify-between">
       <span className={`${small ? 'text-xs text-ink-tertiary' : 'text-sm text-ink-secondary'}`}>{label}</span>
-      <span className={`text-sm ${bold ? 'font-bold text-ink text-base' : 'text-ink'}`}>{value}</span>
+      <span className={`text-sm ${bold ? 'font-bold text-ink text-base' : accent ? 'text-success font-semibold' : 'text-ink'}`}>{value}</span>
     </div>
   )
 }
